@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="真白猫ミミィのYouTubeライブ配信チャットを検索できるファンメイドツール">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' https://i.ytimg.com; frame-src https://www.youtube.com; connect-src 'self';">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <title>真白猫ミミィコメント検索 🐾</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=9">
+</head>
+<body>
+    <div class="app">
+        <!-- ヘッダー -->
+        <header class="header" id="header">
+            <div class="header-inner">
+                <div class="logo">
+                    <span class="logo-emoji">🐾</span>
+                    <h1 class="logo-text">真白猫ミミィコメント検索</h1>
+                    <span class="logo-badge">β</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 検索バー -->
+        <div class="search-section" id="search-section">
+            <div class="search-container">
+                <div class="search-box" id="search-box">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="m21 21-4.35-4.35"/>
+                    </svg>
+                    <input
+                        type="text"
+                        id="search-input"
+                        class="search-input"
+                        placeholder="キーワードで検索（例：おはろね　無料　くしゃみ）"
+                        autocomplete="off"
+                        spellcheck="false"
+                    >
+                    <button id="clear-btn" class="clear-btn" aria-label="クリア" style="display:none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- フィルター -->
+                <div class="filters" id="filters">
+                    <select id="sort-order" class="filter-select">
+                        <option value="desc">新しい順</option>
+                        <option value="asc">古い順</option>
+                    </select>
+                    <div class="result-count" id="result-count"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ステータス -->
+        <div class="status-bar" id="status-bar">
+            <div class="status-inner">
+                <span id="status-text">データ読み込み中...</span>
+                <div class="progress-bar" id="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 検索結果 -->
+        <main class="results-section" id="results-section">
+            <!-- 初期画面 -->
+            <div class="welcome" id="welcome">
+                <div class="welcome-icon">🔍</div>
+                <h2>ライブ配信チャットを検索</h2>
+                <p>キーワードを入力すると、過去の配信チャットから該当するコメントを検索できます。</p>
+                <div class="welcome-stats" id="welcome-stats"></div>
+            </div>
+
+            <!-- 結果リスト -->
+            <div class="results-list" id="results-list" style="display:none;"></div>
+
+            <!-- もっと見る -->
+            <button class="load-more-btn" id="load-more" style="display:none;">
+                もっと見る
+            </button>
+
+            <!-- 結果なし -->
+            <div class="no-results" id="no-results" style="display:none;">
+                <div class="no-results-icon">😿</div>
+                <p>該当するチャットが見つかりませんでした</p>
+            </div>
+        </main>
+
+        <!-- このサイトについて -->
+                <!-- 動画詳細画面 -->
+        <div class="detail-section" id="detail-section" style="display:none;">
+            <div class="detail-container">
+                <!-- 戻るボタン -->
+                <button class="back-btn" id="detail-back-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    検索結果に戻る
+                </button>
+                
+                <!-- メイン詳細コンテンツ -->
+                <div class="detail-content">
+                    <!-- 左側：動画埋め込みプレイヤー -->
+                    <div class="player-container">
+                        <div class="iframe-wrapper">
+                            <iframe 
+                                id="youtube-player" 
+                                src="" 
+                                frameborder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                                allowfullscreen
+                            ></iframe>
+                        </div>
+
+                        <h2 class="detail-video-title" id="detail-video-title"></h2>
+                        <div class="detail-video-date" id="detail-video-date"></div>
+                    </div>
+                    
+                    <!-- 右側：ヒットしたコメント一覧 -->
+                    <div class="detail-comments-container">
+                        <!-- 動画内単体検索フォーム -->
+                        <div class="video-search-container">
+                            <span class="video-search-label">キーワード:</span>
+                            <input type="text" id="video-search-input" class="video-search-input" placeholder="この動画内を検索">
+                            <button id="video-search-btn" class="video-search-btn" aria-label="動画内検索">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <path d="m21 21-4.35-4.35"/>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <h3 class="detail-comments-title">🐾 ヒットしたコメント</h3>
+                        <div class="detail-comments-list" id="detail-comments-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+<div class="about-section" id="about-section" style="display:none;">
+            <div class="about-card">
+                <h2 class="about-title">🐾 このサイトについて</h2>
+                <ul class="about-list">
+                    <li>個人製作のファンメイドツールです</li>
+                    <li>コメント欄を検索することでアーカイブ再生に繋がることを目的としています</li>
+                    <li>メンバー限定配信のチャットデータは含まれません</li>
+                    <li>配信主様に不利益になる使い方をされた場合は公開を停止します</li>
+                </ul>
+                <button class="back-btn" id="about-back-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    検索に戻る
+                </button>
+            </div>
+        </div>
+        
+
+        <!-- フッター -->
+        <footer class="footer">
+            <p>
+                <span style="color: var(--accent-pink);">真白猫ミミィ</span> ライブチャットアーカイブ
+            </p>
+            <p class="footer-note">
+                <a href="#" id="about-link">このサイトについて</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="app.js?v=13"></script>
+</body>
+</html>

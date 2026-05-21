@@ -1,0 +1,30 @@
+# Raw chat data (large, not for deployment)
+chat_*.live_chat.json
+progress.json
+
+# Backups
+*.bak
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
