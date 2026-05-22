@@ -706,7 +706,7 @@ body {
     }
 
     .search-input {
-        font-size: 0.85rem;
+        font-size: 16px; /* iOS自動ズーム防止: 16px未満だとタップ時にズームされる */
     }
 
     .filter-select {
@@ -732,7 +732,7 @@ body {
     }
 
     .video-group-header {
-        flex-direction: column;
+        flex-direction: row;
         gap: 12px;
         padding: 12px;
         margin-top: 15px;
@@ -740,8 +740,8 @@ body {
     }
 
     .video-thumbnail-container {
-        width: 100%;
-        max-width: 100%;
+        width: 50%;
+        max-width: 50%;
     }
 
     .video-info-container {
