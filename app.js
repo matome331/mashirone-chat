@@ -151,37 +151,44 @@
     async function loadAllChunks() {
         const total = state.index.length;
         let loaded = 0;
+        const BATCH_SIZE = 20; // 同時読み込み数
 
         showStatus(`チャットデータを読み込み中... (0/${total})`);
 
-        for (const video of state.index) {
-            if (!isValidVideoId(video.id)) {
-                console.warn('Invalid video ID skipped:', video.id);
-                loaded++;
-                continue;
-            }
-            try {
-                const res = await fetch(`${DATA_BASE}/chunks/${video.id}.json?v=13`);
-                const messages = await res.json();
-                state.loadedChunks[video.id] = messages;
+        // バッチ単位で並列読み込み
+        for (let i = 0; i < state.index.length; i += BATCH_SIZE) {
+            const batch = state.index.slice(i, i + BATCH_SIZE);
 
-                // 全メッセージリストに追加（ビデオID付き）
-                for (const msg of messages) {
-                    state.allMessages.push({
-                        vid: video.id,
-                        a: msg.a,
-                        m: msg.m,
-                        t: msg.t,
-                        vr: video.rank || 0
-                    });
+            const promises = batch.map(async (video) => {
+                if (!isValidVideoId(video.id)) {
+                    console.warn('Invalid video ID skipped:', video.id);
+                    return;
                 }
+                try {
+                    const res = await fetch(`${DATA_BASE}/chunks/${video.id}.json?v=13`);
+                    const messages = await res.json();
+                    state.loadedChunks[video.id] = messages;
 
-                state.totalMessages += messages.length;
-            } catch (e) {
-                console.warn(`チャンク読み込み失敗: ${video.id}`, e);
-            }
+                    // 全メッセージリストに追加（ビデオID付き）
+                    for (const msg of messages) {
+                        state.allMessages.push({
+                            vid: video.id,
+                            a: msg.a,
+                            m: msg.m,
+                            t: msg.t,
+                            vr: video.rank || 0
+                        });
+                    }
 
-            loaded++;
+                    state.totalMessages += messages.length;
+                } catch (e) {
+                    console.warn(`チャンク読み込み失敗: ${video.id}`, e);
+                }
+            });
+
+            await Promise.all(promises);
+
+            loaded += batch.length;
             const pct = (loaded / total * 100).toFixed(0);
             dom.progressFill.style.width = pct + '%';
             dom.statusText.textContent = `チャットデータを読み込み中... (${loaded}/${total})`;
