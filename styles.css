@@ -48,6 +48,7 @@ html {
     -webkit-font-smoothing: antialiased;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    overflow-x: hidden;
 }
 
 body {
@@ -688,7 +689,7 @@ body {
     }
 
     .header {
-        padding: 1rem 0 0.5rem;
+        padding: 0.8rem 0 0.3rem;
     }
 
     .logo-text {
@@ -865,7 +866,7 @@ body {
    ========================================================================== */
 
 .detail-section {
-    padding: 1.5rem 0;
+    padding: 0.5rem 0;
     animation: fadeIn 0.4s ease;
     width: 100%;
 }
