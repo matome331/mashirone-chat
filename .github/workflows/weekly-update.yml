@@ -34,9 +34,9 @@ jobs:
       - name: Run chat collection
         env:
           PYTHONIOENCODING: utf-8
+          INPUT_LIMIT: ${{ github.event.inputs.limit || '10' }}
         run: |
-          LIMIT="${{ github.event.inputs.limit || '10' }}"
-          python scripts/collect_chats.py --limit "$LIMIT" --sleep 5
+          python scripts/collect_chats.py --limit "$INPUT_LIMIT" --sleep 5
 
       - name: Check for changes
         id: check

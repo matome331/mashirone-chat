@@ -38,9 +38,9 @@ jobs:
       - name: Run archive check
         env:
           PYTHONIOENCODING: utf-8
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
-          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
-          if [ "$DRY_RUN" = "true" ]; then
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
             python scripts/check_archives.py --dry-run --sleep 2
           else
             python scripts/check_archives.py --sleep 2
