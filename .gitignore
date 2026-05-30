@@ -1,5 +1,7 @@
 # Raw chat data (large, not for deployment)
 chat_*.live_chat.json
+scripts/raw_chats/
+test_output/
 progress.json
 
 # Backups

@@ -1,0 +1,62 @@
+name: Monthly Archive Check
+
+on:
+  schedule:
+    # 毎月1日 AM10:00 JST (UTC 01:00)
+    - cron: '0 1 1 * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'チェックのみ（削除しない）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # 684本チェックで最大2時間
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install yt-dlp
+        run: pip install yt-dlp
+
+      - name: Run archive check
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          if [ "$DRY_RUN" = "true" ]; then
+            python scripts/check_archives.py --dry-run --sleep 2
+          else
+            python scripts/check_archives.py --sleep 2
+          fi
+
+      - name: Check for changes
+        id: check
+        run: |
+          git diff --quiet data/ && echo "changed=false" >> $GITHUB_OUTPUT || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          TIMESTAMP=$(date -u +"%Y-%m-%d")
+          git commit -m "chore: remove unavailable archives ($TIMESTAMP)"
+          git push

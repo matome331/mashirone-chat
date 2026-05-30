@@ -3,6 +3,8 @@
 """
 ミミィチャット検索 - データ収集パイプライン
 yt-dlp を使って YouTube ライブチャットを収集・パースし、検索用JSONを生成する
+
+GitHub Actions / ローカル両対応
 """
 
 import json
@@ -17,17 +19,20 @@ from datetime import datetime
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 
-# パス設定
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-RAW_DIR = os.path.join(PROJECT_ROOT, "raw_chats")       # yt-dlp生データ
-DATA_DIR = os.path.join(PROJECT_ROOT, "site", "data")    # サイト用JSON
-PROGRESS_FILE = os.path.join(PROJECT_ROOT, "progress.json")
+# パス設定（リポジトリルート基準）
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # scripts/ の親
+SCRIPTS_DIR = os.path.join(REPO_ROOT, "scripts")
+RAW_DIR = os.path.join(SCRIPTS_DIR, "raw_chats")
+DATA_DIR = os.path.join(REPO_ROOT, "data")
+CHUNKS_DIR = os.path.join(DATA_DIR, "chunks")
+INDEX_FILE = os.path.join(DATA_DIR, "index.json")
+PROGRESS_FILE = os.path.join(SCRIPTS_DIR, "progress.json")
 
 # チャンネル情報
-CHANNEL_URL = "https://www.youtube.com/@mashironemimiy"
+CHANNEL_URL = "https://www.youtube.com/@mashi_rone"
 
 os.makedirs(RAW_DIR, exist_ok=True)
-os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(CHUNKS_DIR, exist_ok=True)
 
 
 def load_progress():
@@ -42,43 +47,27 @@ def save_progress(progress):
         json.dump(progress, f, ensure_ascii=False, indent=2)
 
 
-def get_video_list(channel_url=None, from_file=None, limit=None):
-    """チャンネルの動画一覧を取得（既存リストファイルまたはyt-dlpで取得）"""
-    
-    if from_file and os.path.exists(from_file):
-        print(f"  既存リストから読み込み: {from_file}")
-        with open(from_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        videos = []
-        for vid_id, info in data.items():
-            dur = info.get('duration')
-            if dur and dur > 300:  # 5分以上の動画のみ（短尺動画を除外）
-                videos.append({
-                    'id': vid_id,
-                    'title': info.get('title', ''),
-                    'duration': dur,
-                })
-        
-        # 長い配信から優先（チャットが多い順に処理）
-        videos.sort(key=lambda x: x['duration'], reverse=True)
-        
-        if limit:
-            videos = videos[:limit]
-        
-        print(f"  対象動画: {len(videos)}本")
-        return videos
-    
-    # yt-dlpでリスト取得
-    print(f"  チャンネルから動画リスト取得中...")
+def load_existing_index():
+    """既存の index.json を読み込み、処理済み動画IDのセットを返す"""
+    if os.path.exists(INDEX_FILE):
+        with open(INDEX_FILE, 'r', encoding='utf-8') as f:
+            index = json.load(f)
+        return {entry['id'] for entry in index}, index
+    return set(), []
+
+
+def get_video_list_from_channel(limit=10):
+    """yt-dlp でチャンネルの動画一覧を取得"""
+    print(f"  チャンネルから動画リスト取得中... ({CHANNEL_URL})")
     cmd = [
         "yt-dlp",
         "--flat-playlist",
         "--print", "%(id)s\t%(title)s\t%(duration)s",
-        channel_url + "/videos",
+        CHANNEL_URL + "/videos",
     ]
-    
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+
+    result = subprocess.run(cmd, capture_output=True, text=True,
+                            encoding='utf-8', errors='replace', timeout=300)
     videos = []
     for line in result.stdout.strip().split('\n'):
         parts = line.split('\t')
@@ -88,31 +77,51 @@ def get_video_list(channel_url=None, from_file=None, limit=None):
                 duration = float(duration_str) if duration_str != 'NA' else 0
             except ValueError:
                 duration = 0
-            
-            if duration > 300:
+
+            if duration > 300:  # 5分以上（ショート動画除外）
                 videos.append({
                     'id': vid_id,
                     'title': title,
                     'duration': duration,
                 })
-    
+
     if limit:
         videos = videos[:limit]
-    
+
     print(f"  取得動画: {len(videos)}本")
     return videos
+
+
+def get_video_upload_date(video_id):
+    """yt-dlp で動画の配信日を取得"""
+    cmd = [
+        "yt-dlp",
+        "--skip-download",
+        "--print", "%(upload_date)s",
+        f"https://www.youtube.com/watch?v={video_id}",
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                encoding='utf-8', errors='replace', timeout=30)
+        date_str = result.stdout.strip()
+        if date_str and date_str != 'NA' and len(date_str) == 8:
+            # YYYYMMDD → YYYY/MM/DD
+            return f"{date_str[:4]}/{date_str[4:6]}/{date_str[6:8]}"
+    except (subprocess.TimeoutExpired, Exception) as e:
+        print(f"    日付取得失敗: {e}")
+    return ""
 
 
 def download_live_chat(video_id):
     """1つの動画のライブチャットをダウンロード"""
     output_path = os.path.join(RAW_DIR, f"chat_{video_id}")
     url = f"https://www.youtube.com/watch?v={video_id}"
-    
+
     # 既にダウンロード済みか確認
     existing = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
     if existing:
         return existing[0]
-    
+
     cmd = [
         "yt-dlp",
         "--skip-download",
@@ -122,14 +131,13 @@ def download_live_chat(video_id):
         "-o", output_path,
         url,
     ]
-    
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace',
-                          timeout=120)
-    
+
+    result = subprocess.run(cmd, capture_output=True, text=True,
+                            encoding='utf-8', errors='replace', timeout=180)
+
     if result.returncode != 0:
         return None
-    
-    # 出力ファイルを探す
+
     files = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
     return files[0] if files else None
 
@@ -137,25 +145,25 @@ def download_live_chat(video_id):
 def parse_live_chat(filepath):
     """yt-dlpのライブチャットJSONLをパースしてメッセージリストに変換"""
     messages = []
-    
+
     with open(filepath, 'r', encoding='utf-8') as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
-            
+
             try:
                 data = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            
+
             replay = data.get('replayChatItemAction', {})
             offset_ms = int(replay.get('videoOffsetTimeMsec', 0))
-            
+
             for action in replay.get('actions', []):
                 add_action = action.get('addChatItemAction', {})
                 item = add_action.get('item', {})
-                
+
                 renderer = (
                     item.get('liveChatTextMessageRenderer') or
                     item.get('liveChatPaidMessageRenderer') or
@@ -163,8 +171,7 @@ def parse_live_chat(filepath):
                 )
                 if not renderer:
                     continue
-                
-                # テキスト組み立て
+
                 msg_runs = renderer.get('message', {}).get('runs', [])
                 text_parts = []
                 for run in msg_runs:
@@ -181,167 +188,173 @@ def parse_live_chat(filepath):
                                     .get('accessibilityData', {})
                                     .get('label', ''))
                             text_parts.append(f":{label}:" if label else '')
-                
+
                 text = ''.join(text_parts).strip()
                 if not text:
                     continue
-                
+
                 author = renderer.get('authorName', {}).get('simpleText', '')
-                
+
                 messages.append({
                     'a': author,
                     'm': text,
-                    't': round(offset_ms / 1000),  # 秒単位
+                    't': round(offset_ms / 1000),
                 })
-    
+
     return messages
 
 
-def build_site_data(videos, progress):
-    """全動画のチャットデータをサイト用JSONに変換"""
-    
-    index = []  # 動画インデックス
-    
-    for video in videos:
-        vid_id = video['id']
-        if vid_id not in progress['completed']:
-            continue
-        
-        # パース済みデータを読み込み
-        chunk_file = os.path.join(DATA_DIR, "chunks", f"{vid_id}.json")
-        if not os.path.exists(chunk_file):
-            continue
-        
-        with open(chunk_file, 'r', encoding='utf-8') as f:
-            messages = json.load(f)
-        
-        index.append({
-            'id': vid_id,
-            'title': video['title'],
-            'duration': video.get('duration', 0),
-            'count': len(messages),
-        })
-    
-    # インデックスを保存
-    index_file = os.path.join(DATA_DIR, "index.json")
-    with open(index_file, 'w', encoding='utf-8') as f:
-        json.dump(index, f, ensure_ascii=False, indent=2)
-    
-    print(f"  インデックス生成: {len(index)}動画")
-    return index
+def update_index(existing_index, new_entries):
+    """既存のインデックスに新しいエントリを追加し、日付順にソート・ランク付与"""
+    # 既存エントリをIDでマッピング
+    index_map = {entry['id']: entry for entry in existing_index}
+
+    # 新しいエントリを追加（既存なら上書き）
+    for entry in new_entries:
+        index_map[entry['id']] = entry
+
+    # リストに変換してタイムスタンプ降順ソート
+    combined = list(index_map.values())
+    combined.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+
+    # ランク再付与（大きいほど新しい）
+    for i, item in enumerate(combined):
+        item['rank'] = len(combined) - i
+
+    return combined
 
 
-def collect_and_process(video_list_file=None, limit=5, sleep_sec=3):
-    """メインの収集・処理パイプライン"""
-    
+def collect_and_process(limit=10, sleep_sec=5):
+    """メインの収集・処理パイプライン（差分収集）"""
+
     print("=" * 60)
     print("  ミミィチャット検索 - データ収集パイプライン")
     print("=" * 60)
-    
+
+    # 既存データ読み込み
+    existing_ids, existing_index = load_existing_index()
+    print(f"  既存データ: {len(existing_ids)}本")
+
     progress = load_progress()
-    
-    # 動画リスト取得
-    videos = get_video_list(
-        channel_url=CHANNEL_URL,
-        from_file=video_list_file,
-        limit=limit
-    )
-    progress['video_list'] = [v['id'] for v in videos]
-    save_progress(progress)
-    
-    # チャンクディレクトリ作成
-    chunks_dir = os.path.join(DATA_DIR, "chunks")
-    os.makedirs(chunks_dir, exist_ok=True)
-    
-    # 各動画を処理
-    total = len(videos)
-    for i, video in enumerate(videos, 1):
+
+    # チャンネルから動画リスト取得
+    all_videos = get_video_list_from_channel(limit=None)  # 全件取得
+
+    # 未処理の動画だけフィルタリング
+    new_videos = [v for v in all_videos
+                  if v['id'] not in existing_ids
+                  and v['id'] not in progress.get('failed', [])]
+
+    if not new_videos:
+        print("  新しい動画はありません。")
+        return
+
+    # limit 適用
+    if limit:
+        new_videos = new_videos[:limit]
+
+    print(f"  新規収集対象: {len(new_videos)}本")
+
+    new_entries = []
+    total = len(new_videos)
+
+    for i, video in enumerate(new_videos, 1):
         vid_id = video['id']
-        
-        if vid_id in progress['completed']:
-            print(f"  [{i}/{total}] {vid_id} - スキップ（処理済み）")
-            continue
-        
-        if vid_id in progress['failed']:
-            print(f"  [{i}/{total}] {vid_id} - スキップ（前回失敗）")
-            continue
-        
-        print(f"\n  [{i}/{total}] {vid_id}: {video['title'][:40]}...")
-        
+        print(f"\n  [{i}/{total}] {vid_id}: {video['title'][:50]}...")
+
         # 1. ダウンロード
         print(f"    チャットダウンロード中...")
         try:
             filepath = download_live_chat(vid_id)
         except subprocess.TimeoutExpired:
             print(f"    → タイムアウト")
-            progress['failed'].append(vid_id)
+            progress.setdefault('failed', []).append(vid_id)
             save_progress(progress)
             continue
-        
+
         if not filepath:
             print(f"    → チャットなし or エラー")
-            progress['failed'].append(vid_id)
+            progress.setdefault('failed', []).append(vid_id)
             save_progress(progress)
             time.sleep(sleep_sec)
             continue
-        
+
         # 2. パース
         print(f"    パース中...")
         messages = parse_live_chat(filepath)
         print(f"    → {len(messages)} メッセージ")
-        
+
         if not messages:
-            progress['failed'].append(vid_id)
+            progress.setdefault('failed', []).append(vid_id)
             save_progress(progress)
             time.sleep(sleep_sec)
             continue
-        
+
         # 3. チャンクファイル保存
-        chunk_file = os.path.join(chunks_dir, f"{vid_id}.json")
+        chunk_file = os.path.join(CHUNKS_DIR, f"{vid_id}.json")
         with open(chunk_file, 'w', encoding='utf-8') as f:
             json.dump(messages, f, ensure_ascii=False, separators=(',', ':'))
-        
+
         chunk_size = os.path.getsize(chunk_file)
         print(f"    → 保存: {chunk_size/1024:.0f} KB")
-        
-        # 4. 進捗更新
-        progress['completed'].append(vid_id)
+
+        # 4. 日付取得
+        print(f"    日付取得中...")
+        date_str = get_video_upload_date(vid_id)
+        timestamp = 0
+        if date_str:
+            try:
+                dt = datetime.strptime(date_str, '%Y/%m/%d')
+                timestamp = int(dt.timestamp())
+            except ValueError:
+                pass
+        print(f"    → 配信日: {date_str or '不明'}")
+
+        # 5. エントリ作成
+        new_entries.append({
+            'id': vid_id,
+            'title': video['title'],
+            'duration': video.get('duration', 0),
+            'count': len(messages),
+            'date': date_str,
+            'timestamp': timestamp,
+        })
+
+        progress.setdefault('completed', []).append(vid_id)
         save_progress(progress)
-        
+
         # レート制限回避
         if i < total:
             time.sleep(sleep_sec)
-    
-    # インデックス生成
-    print(f"\n  インデックス生成中...")
-    index = build_site_data(videos, progress)
-    
+
+    # インデックス更新（既存 + 新規をマージ）
+    if new_entries:
+        print(f"\n  インデックス更新中...")
+        combined_index = update_index(existing_index, new_entries)
+
+        with open(INDEX_FILE, 'w', encoding='utf-8') as f:
+            json.dump(combined_index, f, ensure_ascii=False, indent=2)
+
+        print(f"  インデックス更新完了: {len(combined_index)}動画 (+{len(new_entries)}本)")
+
     # サマリー
     print(f"\n{'=' * 60}")
     print(f"  完了サマリー")
     print(f"{'=' * 60}")
-    print(f"  処理済み: {len(progress['completed'])}本")
-    print(f"  失敗: {len(progress['failed'])}本")
-    
-    total_size = 0
-    for f in glob.glob(os.path.join(chunks_dir, "*.json")):
-        total_size += os.path.getsize(f)
-    print(f"  チャンクデータ合計: {total_size/1024/1024:.2f} MB")
+    print(f"  新規収集: {len(new_entries)}本")
+    print(f"  合計: {len(existing_ids) + len(new_entries)}本")
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='ミミィチャット検索 データ収集')
-    parser.add_argument('--from-file', default=r'c:\Users\grave\yt-comments\channel_video_list.json',
-                       help='既存の動画リストファイル')
-    parser.add_argument('--limit', type=int, default=5,
-                       help='処理する動画数の上限')
-    parser.add_argument('--sleep', type=int, default=3,
-                       help='動画間のスリープ秒数')
+    parser.add_argument('--limit', type=int, default=10,
+                       help='処理する動画数の上限 (default: 10)')
+    parser.add_argument('--sleep', type=int, default=5,
+                       help='動画間のスリープ秒数 (default: 5)')
     args = parser.parse_args()
-    
+
     collect_and_process(
-        video_list_file=args.from_file,
         limit=args.limit,
         sleep_sec=args.sleep,
     )
