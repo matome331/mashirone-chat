@@ -31,6 +31,11 @@ PROGRESS_FILE = os.path.join(SCRIPTS_DIR, "progress.json")
 # チャンネル情報
 CHANNEL_URL = "https://www.youtube.com/@mashi_rone"
 
+# 除外リスト（不備のある配信など、収集対象から永久に除外する動画ID）
+EXCLUDED_IDS = {
+    "rPgWLBgZfqE",  # 2024/05/09 配信 - データ不備
+}
+
 os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(CHUNKS_DIR, exist_ok=True)
 
@@ -240,10 +245,11 @@ def collect_and_process(limit=10, sleep_sec=5):
     # チャンネルから動画リスト取得
     all_videos = get_video_list_from_channel(limit=None)  # 全件取得
 
-    # 未処理の動画だけフィルタリング
+    # 未処理の動画だけフィルタリング（除外リストも適用）
     new_videos = [v for v in all_videos
                   if v['id'] not in existing_ids
-                  and v['id'] not in progress.get('failed', [])]
+                  and v['id'] not in progress.get('failed', [])
+                  and v['id'] not in EXCLUDED_IDS]
 
     if not new_videos:
         print("  新しい動画はありません。")
