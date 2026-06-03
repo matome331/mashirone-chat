@@ -62,38 +62,59 @@ def load_existing_index():
 
 
 def get_video_list_from_channel(limit=10):
-    """yt-dlp でチャンネルの動画一覧を取得"""
+    """yt-dlp でチャンネルの動画一覧を取得（ライブ配信 + 通常動画）"""
     print(f"  チャンネルから動画リスト取得中... ({CHANNEL_URL})")
-    cmd = [
-        "yt-dlp",
-        "--flat-playlist",
-        "--print", "%(id)s\t%(title)s\t%(duration)s",
-        CHANNEL_URL + "/videos",
-    ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True,
-                            encoding='utf-8', errors='replace', timeout=300)
+    seen_ids = set()
     videos = []
-    for line in result.stdout.strip().split('\n'):
-        parts = line.split('\t')
-        if len(parts) >= 3:
-            vid_id, title, duration_str = parts[0], parts[1], parts[2]
-            try:
-                duration = float(duration_str) if duration_str != 'NA' else 0
-            except ValueError:
-                duration = 0
 
-            if duration > 300:  # 5分以上（ショート動画除外）
+    # /streams（ライブ配信）を優先し、/videos（通常動画）も取得
+    for tab in ["/streams", "/videos"]:
+        print(f"    {tab} タブ取得中...")
+        cmd = [
+            "yt-dlp",
+            "--flat-playlist",
+            "--print", "%(id)s\t%(title)s\t%(duration)s",
+            CHANNEL_URL + tab,
+        ]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                    encoding='utf-8', errors='replace', timeout=300)
+        except subprocess.TimeoutExpired:
+            print(f"    → {tab} タイムアウト、スキップ")
+            continue
+
+        tab_count = 0
+        for line in result.stdout.strip().split('\n'):
+            parts = line.split('\t')
+            if len(parts) >= 3:
+                vid_id, title, duration_str = parts[0], parts[1], parts[2]
+
+                if vid_id in seen_ids:
+                    continue
+                seen_ids.add(vid_id)
+
+                try:
+                    duration = float(duration_str) if duration_str != 'NA' else 0
+                except ValueError:
+                    duration = 0
+
+                # /videos タブのみ5分以上フィルタ（ショート除外）
+                # /streams タブはライブ配信なので全て対象
+                if tab == "/videos" and duration <= 300:
+                    continue
+
                 videos.append({
                     'id': vid_id,
                     'title': title,
                     'duration': duration,
                 })
+                tab_count += 1
 
-    if limit:
-        videos = videos[:limit]
+        print(f"    → {tab_count}本")
 
-    print(f"  取得動画: {len(videos)}本")
+    print(f"  取得動画合計: {len(videos)}本")
     return videos
 
 
