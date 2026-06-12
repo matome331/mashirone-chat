@@ -276,6 +276,9 @@ def collect_and_process(limit=10, sleep_sec=5):
         print("  新しい動画はありません。")
         return
 
+    # 古い配信から優先的に処理（新しい配信はチャットリプレイ未生成の場合がある）
+    new_videos.reverse()
+
     # limit 適用
     if limit:
         new_videos = new_videos[:limit]
