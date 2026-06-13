@@ -3,10 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="真白猫ミミィのYouTubeライブ配信チャットを検索できるファンメイドツール">
+    <meta name="description" content="真白猫ミミィのYouTubeライブ配信チャット700本以上を横断検索できるファンメイドツール。キーワードで過去の配信コメントを検索し、該当のアーカイブ再生に直接ジャンプ。">
+    <meta name="keywords" content="真白猫ミミィ, ましろね, VTuber, ライブチャット, コメント検索, 配信アーカイブ, YouTube">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' https://i.ytimg.com; frame-src https://www.youtube.com; connect-src 'self';">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <title>真白猫ミミィコメント検索 🐾</title>
+    <title>真白猫ミミィコメント検索 🐾｜配信チャットアーカイブ検索ツール</title>
+    <link rel="canonical" href="https://matome331.github.io/mashirone-chat/">
+    <!-- OGP -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="真白猫ミミィコメント検索 🐾">
+    <meta property="og:description" content="真白猫ミミィのYouTubeライブ配信チャット700本以上を横断検索。キーワードで過去のコメントを探してアーカイブ再生にジャンプ。">
+    <meta property="og:url" content="https://matome331.github.io/mashirone-chat/">
+    <meta property="og:site_name" content="真白猫ミミィコメント検索">
+    <meta property="og:locale" content="ja_JP">
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="真白猫ミミィコメント検索 🐾">
+    <meta name="twitter:description" content="配信チャット700本以上を横断検索できるファンメイドツール">
+    <!-- 構造化データ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "真白猫ミミィコメント検索",
+      "description": "真白猫ミミィのYouTubeライブ配信チャットを横断検索できるファンメイドツール",
+      "url": "https://matome331.github.io/mashirone-chat/",
+      "applicationCategory": "SearchApplication",
+      "operatingSystem": "Web",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "JPY" },
+      "inLanguage": "ja",
+      "about": {
+        "@type": "Person",
+        "name": "真白猫ミミィ",
+        "alternateName": "ましろね ミミィ",
+        "url": "https://www.youtube.com/@mashi_rone"
+      }
+    }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -174,6 +207,26 @@
             </p>
         </footer>
     </div>
+
+    <!-- 検索エンジン向けフォールバックコンテンツ -->
+    <noscript>
+        <div style="max-width:800px;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+            <h1>真白猫ミミィ コメント検索</h1>
+            <p>真白猫ミミィ（ましろね ミミィ）のYouTubeライブ配信チャットを横断検索できるファンメイドツールです。</p>
+            <h2>機能</h2>
+            <ul>
+                <li>700本以上の配信チャットを一括検索</li>
+                <li>キーワードでコメントを検索し、該当のアーカイブ再生に直接ジャンプ</li>
+                <li>配信日順（新しい順/古い順）でソート</li>
+                <li>動画内の個別コメント検索</li>
+            </ul>
+            <h2>関連リンク</h2>
+            <ul>
+                <li><a href="https://www.youtube.com/@mashi_rone">真白猫ミミィ - YouTubeチャンネル</a></li>
+            </ul>
+            <p>このツールはJavaScriptが必要です。ブラウザのJavaScriptを有効にしてください。</p>
+        </div>
+    </noscript>
 
     <script src="app.js?v=14"></script>
 </body>
