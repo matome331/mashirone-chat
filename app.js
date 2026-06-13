@@ -22,6 +22,7 @@
         sortOrder: 'desc',
         isLoading: false,
         totalMessages: 0,
+        savedScrollY: null,  // 詳細画面から戻る時のスクロール位置復元用
     };
 
     // ===== DOM参照 =====
@@ -4814,7 +4815,10 @@
     function showVideoDetail(video, messages) {
         state.activeVideoId = video.id;
         state.activeVideoMessages = state.loadedChunks[video.id] || [];
-        
+
+        // 検索結果のスクロール位置を保存（戻る時に復元するため）
+        state.savedScrollY = window.scrollY;
+
         dom.searchSection.style.display = 'none';
         dom.resultsSection.style.display = 'none';
         dom.aboutSection.style.display = 'none';
@@ -4936,7 +4940,14 @@
             appContainer.classList.remove('detail-mode');
         }
         
-        window.scrollTo({ top: 0 });
+        // 検索結果画面のスクロール位置を復元
+        if (typeof state.savedScrollY === 'number') {
+            // display 変更後にレイアウトが確定してからスクロール
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: state.savedScrollY });
+                state.savedScrollY = null;
+            });
+        }
     }
 
     function checkRoute() {
