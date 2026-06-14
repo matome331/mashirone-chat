@@ -17,6 +17,13 @@ import time
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 
+# yt-dlp の出力を確実に UTF-8 にするための環境変数
+def _utf8_env():
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
+    env['PYTHONUTF8'] = '1'
+    return env
+
 # パス設定（リポジトリルート基準）
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(REPO_ROOT, "data")
@@ -38,12 +45,14 @@ def check_video_availability(video_id):
         "--skip-download",
         "--print", "%(availability)s",
         "--no-warnings",
+        "--encoding", "utf-8",
         url,
     ]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True,
-                                encoding='utf-8', errors='replace', timeout=30)
+                                encoding='utf-8', errors='replace',
+                                timeout=30, env=_utf8_env())
 
         availability = result.stdout.strip()
 
