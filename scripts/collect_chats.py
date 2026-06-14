@@ -19,6 +19,13 @@ from datetime import datetime
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 
+# yt-dlp の出力を確実に UTF-8 にするための環境変数
+def _utf8_env():
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
+    env['PYTHONUTF8'] = '1'
+    return env
+
 # パス設定（リポジトリルート基準）
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # scripts/ の親
 SCRIPTS_DIR = os.path.join(REPO_ROOT, "scripts")
@@ -74,13 +81,15 @@ def get_video_list_from_channel(limit=10):
         cmd = [
             "yt-dlp",
             "--flat-playlist",
+            "--encoding", "utf-8",
             "--print", "%(id)s\t%(title)s\t%(duration)s",
             CHANNEL_URL + tab,
         ]
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True,
-                                    encoding='utf-8', errors='replace', timeout=300)
+                                    encoding='utf-8', errors='replace',
+                                    timeout=300, env=_utf8_env())
         except subprocess.TimeoutExpired:
             print(f"    → {tab} タイムアウト、スキップ")
             continue
@@ -128,7 +137,8 @@ def get_video_upload_date(video_id):
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True,
-                                encoding='utf-8', errors='replace', timeout=30)
+                                encoding='utf-8', errors='replace',
+                                timeout=30, env=_utf8_env())
         date_str = result.stdout.strip()
         if date_str and date_str != 'NA' and len(date_str) == 8:
             # YYYYMMDD → YYYY/MM/DD
@@ -159,7 +169,8 @@ def download_live_chat(video_id):
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True,
-                            encoding='utf-8', errors='replace', timeout=180)
+                            encoding='utf-8', errors='replace',
+                            timeout=180, env=_utf8_env())
 
     if result.returncode != 0:
         return None
