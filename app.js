@@ -4944,7 +4944,7 @@
         if (typeof state.savedScrollY === 'number') {
             // display 変更後にレイアウトが確定してからスクロール
             requestAnimationFrame(() => {
-                window.scrollTo({ top: state.savedScrollY });
+                window.scrollTo({ top: state.savedScrollY, behavior: 'instant' });
                 state.savedScrollY = null;
             });
         }
