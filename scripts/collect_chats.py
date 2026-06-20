@@ -43,6 +43,13 @@ EXCLUDED_IDS = {
     "rPgWLBgZfqE",  # 2024/05/09 配信 - データ不備
 }
 
+# メンバー限定配信のタイトルキーワード（チャット取得不可のため除外）
+MEMBERS_ONLY_KEYWORDS = ["メン限", "Members Only", "members only", "Member Only", "member only"]
+
+def is_members_only(title):
+    """タイトルからメンバー限定配信かどうか判定"""
+    return any(kw in title for kw in MEMBERS_ONLY_KEYWORDS)
+
 os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(CHUNKS_DIR, exist_ok=True)
 
@@ -277,20 +284,26 @@ def collect_and_process(limit=10, sleep_sec=5):
     # チャンネルから動画リスト取得
     all_videos = get_video_list_from_channel(limit=None)  # 全件取得
 
-    # 未処理の動画だけフィルタリング（除外リストも適用）
+    # 未処理の動画だけフィルタリング（除外リスト・メン限も除外）
     new_videos = [v for v in all_videos
                   if v['id'] not in existing_ids
                   and v['id'] not in progress.get('failed', [])
-                  and v['id'] not in EXCLUDED_IDS]
+                  and v['id'] not in EXCLUDED_IDS
+                  and not is_members_only(v.get('title', ''))]
 
     if not new_videos:
         print("  新しい動画はありません。")
         return
 
-    # 古い配信から優先的に処理（新しい配信はチャットリプレイ未生成の場合がある）
-    new_videos.reverse()
+    # 最新の数本はチャットリプレイが未生成の可能性があるためスキップ
+    # (yt-dlp は新しい順で返すので、先頭が最新)
+    SKIP_RECENT = 3
+    if len(new_videos) > SKIP_RECENT:
+        skipped = new_videos[:SKIP_RECENT]
+        new_videos = new_videos[SKIP_RECENT:]
+        print(f"  直近{SKIP_RECENT}本はスキップ（チャットリプレイ未生成の可能性）")
 
-    # limit 適用
+    # limit 適用（新しい順のまま処理 → 最近の配信から優先的に収集）
     if limit:
         new_videos = new_videos[:limit]
 

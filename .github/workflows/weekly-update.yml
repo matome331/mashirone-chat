@@ -9,7 +9,7 @@ on:
       limit:
         description: '収集する動画数の上限'
         required: false
-        default: '10'
+        default: '20'
 
 permissions:
   contents: write
