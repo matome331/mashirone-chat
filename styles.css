@@ -223,10 +223,11 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .filter-select {
-    flex: 1;
+    flex: 0 1 auto;
     background: rgba(255, 255, 255, 0.9);
     border: 2px solid var(--border-light);
     border-radius: var(--radius-pill);
@@ -247,6 +248,49 @@ body {
 .filter-select:focus {
     outline: none;
     border-color: var(--accent-blue);
+}
+
+.filter-month {
+    min-width: 0;
+    max-width: 120px;
+}
+
+.filter-separator {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.filter-toggle {
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid var(--border-light);
+    border-radius: var(--radius-pill);
+    padding: 0.4rem 0.8rem;
+    font-family: var(--font-main);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+
+.filter-toggle:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+.filter-toggle.active {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: #fff;
+}
+
+.highlight-reading {
+    background: rgba(255, 213, 79, 0.35);
+    border-radius: 3px;
+    padding: 0 2px;
 }
 
 .result-count {
@@ -718,6 +762,15 @@ body {
     .filter-select {
         font-size: 0.75rem;
         padding: 0.35rem 1.5rem 0.35rem 0.6rem;
+    }
+
+    .filter-month {
+        max-width: 100px;
+    }
+
+    .filter-toggle {
+        font-size: 0.7rem;
+        padding: 0.35rem 0.6rem;
     }
 
     .welcome {

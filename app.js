@@ -23,6 +23,13 @@
         isLoading: false,
         totalMessages: 0,
         savedScrollY: null,  // 詳細画面から戻る時のスクロール位置復元用
+        // フィルター用
+        dateFrom: '',       // 開始月 (YYYY/MM)
+        dateTo: '',         // 終了月 (YYYY/MM)
+        readingFilter: false,   // 読み仮名パターンフィルタ
+        uncheckedFilter: false, // 未チェック配信フィルタ
+        godokuDates: new Set(), // 誤読まとめ登録済み日付
+        videoDateMap: {},    // vid_id -> date string
     };
 
     // ===== DOM参照 =====
@@ -52,6 +59,11 @@
         detailCommentsList: document.getElementById('detail-comments-list'),
         videoSearchInput: document.getElementById('video-search-input'),
         videoSearchBtn: document.getElementById('video-search-btn'),
+        // フィルター
+        dateFrom: document.getElementById('date-from'),
+        dateTo: document.getElementById('date-to'),
+        readingToggle: document.getElementById('reading-toggle'),
+        uncheckedToggle: document.getElementById('unchecked-toggle'),
     };
 
     // ===== 初期化 =====
@@ -72,6 +84,17 @@
         }
 
         // 動画フィルタの処理を削除
+
+        // 日付マップを構築
+        state.index.forEach(v => {
+            state.videoDateMap[v.id] = v.date || '';
+        });
+
+        // 月ドロップダウンを動的生成
+        buildMonthOptions();
+
+        // 誤読まとめサイトの登録済み日付を取得
+        fetchGodokuDates();
 
         // チャンクデータを順次読み込み
         await loadAllChunks();
@@ -101,6 +124,26 @@
         dom.clearBtn.addEventListener('click', onClear);
         dom.sortOrder.addEventListener('change', onSortOrderChange);
         dom.loadMore.addEventListener('click', onLoadMore);
+
+        // フィルターイベント
+        dom.dateFrom.addEventListener('change', () => {
+            state.dateFrom = dom.dateFrom.value;
+            performSearch();
+        });
+        dom.dateTo.addEventListener('change', () => {
+            state.dateTo = dom.dateTo.value;
+            performSearch();
+        });
+        dom.readingToggle.addEventListener('click', () => {
+            state.readingFilter = !state.readingFilter;
+            dom.readingToggle.classList.toggle('active', state.readingFilter);
+            performSearch();
+        });
+        dom.uncheckedToggle.addEventListener('click', () => {
+            state.uncheckedFilter = !state.uncheckedFilter;
+            dom.uncheckedToggle.classList.toggle('active', state.uncheckedFilter);
+            performSearch();
+        });
         
         // このサイトについてのイベントリスナー（漏れ防止修正）
         dom.aboutLink.addEventListener('click', (e) => {
@@ -146,6 +189,46 @@
 
         hideStatus();
         dom.searchInput.focus();
+    }
+
+    // ===== フィルターヘルパー =====
+    function buildMonthOptions() {
+        const months = new Set();
+        state.index.forEach(v => {
+            if (v.date) {
+                const ym = v.date.slice(0, 7); // "YYYY/MM"
+                months.add(ym);
+            }
+        });
+        const sorted = [...months].sort();
+        const defaultFrom = '<option value="">開始月</option>';
+        const defaultTo = '<option value="">終了月</option>';
+        const options = sorted.map(ym => {
+            const [y, m] = ym.split('/');
+            return `<option value="${ym}">${y}年${m}月</option>`;
+        }).join('');
+        dom.dateFrom.innerHTML = defaultFrom + options;
+        dom.dateTo.innerHTML = defaultTo + options;
+    }
+
+    async function fetchGodokuDates() {
+        try {
+            const res = await fetch('https://matome331.github.io/mashirone-godoku/webapp/data.js?v=' + Date.now());
+            const text = await res.text();
+            // data.js は "const dictionaryData = [...];" 形式なので JSON 部分を抽出
+            const match = text.match(/\[[\s\S]*\]/);
+            if (match) {
+                const data = JSON.parse(match[0]);
+                data.forEach(entry => {
+                    if (entry.date) {
+                        state.godokuDates.add(entry.date);
+                    }
+                });
+                console.log(`誤読まとめ: ${state.godokuDates.size}日分の登録済み日付を取得`);
+            }
+        } catch (e) {
+            console.warn('誤読まとめデータの取得に失敗:', e);
+        }
     }
 
     // ===== データ読み込み =====
@@ -200,31 +283,60 @@
         state.allMessages.sort((a, b) => (b.vr - a.vr) || (a.t - b.t));
     }
 
+    // 読み仮名パターンの正規表現（漢字/英字/カタカナ + （ひらがな/カタカナ））
+    const READING_RE_TEST = /[A-Za-zａ-ｚＡ-Ｚぁ-ゖ\u4e00-\u9fffァ-ヶ]+[（(][ぁ-ゖァ-ヶー]+[）)]/;       // フィルタ判定用（gなし）
+    const READING_RE_HIGHLIGHT = /[A-Za-zａ-ｚＡ-Ｚぁ-ゖ\u4e00-\u9fffァ-ヶ]+[（(][ぁ-ゖァ-ヶー]+[）)]/g; // ハイライト用（gあり）
+
     // ===== 検索 =====
     function search(query, sortOrder) {
         const q = query.trim().toLowerCase();
         
-        if (!q) {
+        if (!q && !state.readingFilter && !state.uncheckedFilter) {
             return [];
         }
 
-        // 検索クエリをスペースで分割（AND検索）
-        const terms = q.split(/\s+/).filter(t => t.length > 0);
-
         let results = state.allMessages;
 
+        // 月範囲フィルタ
+        if (state.dateFrom || state.dateTo) {
+            results = results.filter(msg => {
+                const vdate = state.videoDateMap[msg.vid] || '';
+                if (!vdate) return false;
+                const ym = vdate.slice(0, 7); // "YYYY/MM"
+                if (state.dateFrom && ym < state.dateFrom) return false;
+                if (state.dateTo && ym > state.dateTo) return false;
+                return true;
+            });
+        }
+
+        // 未チェックフィルタ（godoku 登録済み日付の配信を除外）
+        if (state.uncheckedFilter && state.godokuDates.size > 0) {
+            results = results.filter(msg => {
+                const vdate = state.videoDateMap[msg.vid] || '';
+                return !state.godokuDates.has(vdate);
+            });
+        }
+
         // テキスト検索（AND条件）
-        results = results.filter(msg => {
-            const text = msg.m.toLowerCase();
-            const author = msg.a.toLowerCase();
-            return terms.every(term => text.includes(term) || author.includes(term));
-        });
+        if (q) {
+            const terms = q.split(/\s+/).filter(t => t.length > 0);
+            results = results.filter(msg => {
+                const text = msg.m.toLowerCase();
+                const author = msg.a.toLowerCase();
+                return terms.every(term => text.includes(term) || author.includes(term));
+            });
+        }
+
+        // 読み仮名パターンフィルタ
+        if (state.readingFilter) {
+            results = results.filter(msg => READING_RE_TEST.test(msg.m));
+        }
 
         // 日付・時間ソート
         if (sortOrder === 'desc') {
-            results.sort((a, b) => (b.vr - a.vr) || (a.t - b.t)); // 新しい動画から、同じ動画内では古いチャット順
+            results.sort((a, b) => (b.vr - a.vr) || (a.t - b.t));
         } else {
-            results.sort((a, b) => (a.vr - b.vr) || (a.t - b.t)); // 古い動画から、同じ動画内では古いチャット順
+            results.sort((a, b) => (a.vr - b.vr) || (a.t - b.t));
         }
 
         return results;
@@ -354,7 +466,7 @@
     }
 
     function performSearch() {
-        if (!state.query.trim()) {
+        if (!state.query.trim() && !state.readingFilter && !state.uncheckedFilter) {
             showWelcome();
             return;
         }
@@ -4789,10 +4901,16 @@
     }
 
     function highlightQuery(html, query) {
-        if (!query.trim()) return html;
+        let result = html;
+
+        // 読み仮名パターンハイライト（フィルタON時）
+        if (state.readingFilter) {
+            result = result.replace(READING_RE_HIGHLIGHT, '<span class="highlight-reading">$&</span>');
+        }
+
+        if (!query.trim()) return result;
         
         const terms = query.trim().split(/\s+/).filter(t => t.length > 0);
-        let result = html;
         
         for (const term of terms) {
             const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

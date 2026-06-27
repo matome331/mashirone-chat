@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="真白猫ミミィのYouTubeライブ配信チャット700本以上を横断検索できるファンメイドツール。キーワードで過去の配信コメントを検索し、該当のアーカイブ再生に直接ジャンプ。">
     <meta name="keywords" content="真白猫ミミィ, ましろね, VTuber, ライブチャット, コメント検索, 配信アーカイブ, YouTube">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' https://i.ytimg.com; frame-src https://www.youtube.com; connect-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' https://i.ytimg.com; frame-src https://www.youtube.com; connect-src 'self' https://matome331.github.io;">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>真白猫ミミィコメント検索 🐾｜配信チャットアーカイブ検索ツール</title>
     <link rel="canonical" href="https://matome331.github.io/mashirone-chat/">
@@ -87,6 +87,15 @@
                         <option value="desc">新しい順</option>
                         <option value="asc">古い順</option>
                     </select>
+                    <select id="date-from" class="filter-select filter-month">
+                        <option value="">開始月</option>
+                    </select>
+                    <span class="filter-separator">〜</span>
+                    <select id="date-to" class="filter-select filter-month">
+                        <option value="">終了月</option>
+                    </select>
+                    <button id="reading-toggle" class="filter-toggle" title="読み仮名パターンでフィルタ">🔤 読み</button>
+                    <button id="unchecked-toggle" class="filter-toggle" title="誤読まとめ未チェック配信だけ表示">📌 未</button>
                     <div class="result-count" id="result-count"></div>
                 </div>
             </div>
