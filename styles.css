@@ -255,12 +255,6 @@ body {
     max-width: 120px;
 }
 
-.filter-separator {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    flex-shrink: 0;
-}
-
 .filter-toggle {
     flex-shrink: 0;
     background: rgba(255, 255, 255, 0.9);

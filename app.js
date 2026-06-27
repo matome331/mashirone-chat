@@ -24,8 +24,7 @@
         totalMessages: 0,
         savedScrollY: null,  // 詳細画面から戻る時のスクロール位置復元用
         // フィルター用
-        dateFrom: '',       // 開始月 (YYYY/MM)
-        dateTo: '',         // 終了月 (YYYY/MM)
+        dateMonth: '',          // 選択月 (YYYY/MM)
         readingFilter: false,   // 読み仮名パターンフィルタ
         uncheckedFilter: false, // 未チェック配信フィルタ
         godokuDates: new Set(), // 誤読まとめ登録済み日付
@@ -60,8 +59,7 @@
         videoSearchInput: document.getElementById('video-search-input'),
         videoSearchBtn: document.getElementById('video-search-btn'),
         // フィルター
-        dateFrom: document.getElementById('date-from'),
-        dateTo: document.getElementById('date-to'),
+        dateMonth: document.getElementById('date-month'),
         readingToggle: document.getElementById('reading-toggle'),
         uncheckedToggle: document.getElementById('unchecked-toggle'),
     };
@@ -126,12 +124,8 @@
         dom.loadMore.addEventListener('click', onLoadMore);
 
         // フィルターイベント
-        dom.dateFrom.addEventListener('change', () => {
-            state.dateFrom = dom.dateFrom.value;
-            performSearch();
-        });
-        dom.dateTo.addEventListener('change', () => {
-            state.dateTo = dom.dateTo.value;
+        dom.dateMonth.addEventListener('change', () => {
+            state.dateMonth = dom.dateMonth.value;
             performSearch();
         });
         dom.readingToggle.addEventListener('click', () => {
@@ -201,14 +195,12 @@
             }
         });
         const sorted = [...months].sort();
-        const defaultFrom = '<option value="">開始月</option>';
-        const defaultTo = '<option value="">終了月</option>';
+        const defaultOpt = '<option value="">全期間</option>';
         const options = sorted.map(ym => {
             const [y, m] = ym.split('/');
             return `<option value="${ym}">${y}年${m}月</option>`;
         }).join('');
-        dom.dateFrom.innerHTML = defaultFrom + options;
-        dom.dateTo.innerHTML = defaultTo + options;
+        dom.dateMonth.innerHTML = defaultOpt + options;
     }
 
     async function fetchGodokuDates() {
@@ -284,8 +276,10 @@
     }
 
     // 読み仮名パターンの正規表現（漢字/英字/カタカナ + （ひらがな/カタカナ））
-    const READING_RE_TEST = /[A-Za-zａ-ｚＡ-Ｚぁ-ゖ\u4e00-\u9fffァ-ヶ]+[（(][ぁ-ゖァ-ヶー]+[）)]/;       // フィルタ判定用（gなし）
-    const READING_RE_HIGHLIGHT = /[A-Za-zａ-ｚＡ-Ｚぁ-ゖ\u4e00-\u9fffァ-ヶ]+[（(][ぁ-ゖァ-ヶー]+[）)]/g; // ハイライト用（gあり）
+    // 前半にひらがなを含めないことで、ふか(いねむ) 等の誤検出を防ぎ、
+    // 「は」等の助詞で区切れるので「英語は未来永劫(えいごう)」が「未来永劫(えいごう)」だけになる
+    const READING_RE_TEST = /[A-Za-zａ-ｚＡ-Ｚ\u4e00-\u9fffァ-ヶ]+[（(][ぁ-ゖァ-ヶー]+[）)]/;       // フィルタ判定用（gなし）
+    const READING_RE_HIGHLIGHT = /[A-Za-zａ-ｚＡ-Ｚ\u4e00-\u9fffァ-ヶ]+[（(][ぁ-ゖァ-ヶー]+[）)]/g; // ハイライト用（gあり）
 
     // ===== 検索 =====
     function search(query, sortOrder) {
@@ -297,15 +291,12 @@
 
         let results = state.allMessages;
 
-        // 月範囲フィルタ
-        if (state.dateFrom || state.dateTo) {
+        // 月フィルタ
+        if (state.dateMonth) {
             results = results.filter(msg => {
                 const vdate = state.videoDateMap[msg.vid] || '';
                 if (!vdate) return false;
-                const ym = vdate.slice(0, 7); // "YYYY/MM"
-                if (state.dateFrom && ym < state.dateFrom) return false;
-                if (state.dateTo && ym > state.dateTo) return false;
-                return true;
+                return vdate.slice(0, 7) === state.dateMonth;
             });
         }
 
