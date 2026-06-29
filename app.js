@@ -131,6 +131,12 @@
         dom.readingToggle.addEventListener('click', () => {
             state.readingFilter = !state.readingFilter;
             dom.readingToggle.classList.toggle('active', state.readingFilter);
+            // 未チェックボタンは誤読検索ON時のみ表示
+            dom.uncheckedToggle.style.display = state.readingFilter ? '' : 'none';
+            if (!state.readingFilter) {
+                state.uncheckedFilter = false;
+                dom.uncheckedToggle.classList.remove('active');
+            }
             performSearch();
         });
         dom.uncheckedToggle.addEventListener('click', () => {
@@ -194,7 +200,7 @@
                 months.add(ym);
             }
         });
-        const sorted = [...months].sort();
+        const sorted = [...months].sort().reverse();
         const defaultOpt = '<option value="">全期間</option>';
         const options = sorted.map(ym => {
             const [y, m] = ym.split('/');
