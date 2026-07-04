@@ -34,7 +34,7 @@ jobs:
       - name: Run chat collection
         env:
           PYTHONIOENCODING: utf-8
-          INPUT_LIMIT: ${{ github.event.inputs.limit || '10' }}
+          INPUT_LIMIT: ${{ github.event.inputs.limit || '30' }}
         run: |
           python scripts/collect_chats.py --limit "$INPUT_LIMIT" --sleep 5
 
@@ -46,9 +46,13 @@ jobs:
       - name: Commit and push
         if: steps.check.outputs.changed == 'true'
         run: |
+          # キャッシュバスト: バージョン番号をタイムスタンプに置換
+          BUST=$(date +%s)
+          sed -i "s/styles\.css?v=[^\"']*/styles.css?v=$BUST/" index.html
+          sed -i "s/app\.js?v=[^\"']*/app.js?v=$BUST/" index.html
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/
+          git add data/ index.html
           TIMESTAMP=$(date -u +"%Y-%m-%d")
           git commit -m "chore: weekly chat update ($TIMESTAMP)"
           git push
