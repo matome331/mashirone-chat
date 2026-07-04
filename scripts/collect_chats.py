@@ -287,7 +287,6 @@ def collect_and_process(limit=10, sleep_sec=5):
     # 未処理の動画だけフィルタリング（除外リスト・メン限も除外）
     new_videos = [v for v in all_videos
                   if v['id'] not in existing_ids
-                  and v['id'] not in progress.get('failed', [])
                   and v['id'] not in EXCLUDED_IDS
                   and not is_members_only(v.get('title', ''))]
 
@@ -303,16 +302,18 @@ def collect_and_process(limit=10, sleep_sec=5):
         new_videos = new_videos[SKIP_RECENT:]
         print(f"  直近{SKIP_RECENT}本はスキップ（チャットリプレイ未生成の可能性）")
 
-    # limit 適用（新しい順のまま処理 → 最近の配信から優先的に収集）
-    if limit:
-        new_videos = new_videos[:limit]
-
-    print(f"  新規収集対象: {len(new_videos)}本")
+    print(f"  新規収集対象: {len(new_videos)}本（成功{limit}本で終了）")
 
     new_entries = []
+    collected = 0  # 成功カウント
     total = len(new_videos)
 
     for i, video in enumerate(new_videos, 1):
+        # limit は成功数でカウント（失敗はカウントしない）
+        if limit and collected >= limit:
+            print(f"\n  収集上限{limit}本に到達、終了")
+            break
+
         vid_id = video['id']
         print(f"\n  [{i}/{total}] {vid_id}: {video['title'][:50]}...")
 
@@ -321,15 +322,12 @@ def collect_and_process(limit=10, sleep_sec=5):
         try:
             filepath = download_live_chat(vid_id)
         except subprocess.TimeoutExpired:
-            print(f"    → タイムアウト")
-            progress.setdefault('failed', []).append(vid_id)
-            save_progress(progress)
+            print(f"    → タイムアウト（スキップ）")
+            time.sleep(sleep_sec)
             continue
 
         if not filepath:
-            print(f"    → チャットなし or エラー")
-            progress.setdefault('failed', []).append(vid_id)
-            save_progress(progress)
+            print(f"    → チャットなし or エラー（スキップ）")
             time.sleep(sleep_sec)
             continue
 
@@ -339,8 +337,6 @@ def collect_and_process(limit=10, sleep_sec=5):
         print(f"    → {len(messages)} メッセージ")
 
         if not messages:
-            progress.setdefault('failed', []).append(vid_id)
-            save_progress(progress)
             time.sleep(sleep_sec)
             continue
 
@@ -374,8 +370,7 @@ def collect_and_process(limit=10, sleep_sec=5):
             'timestamp': timestamp,
         })
 
-        progress.setdefault('completed', []).append(vid_id)
-        save_progress(progress)
+        collected += 1
 
         # レート制限回避
         if i < total:
