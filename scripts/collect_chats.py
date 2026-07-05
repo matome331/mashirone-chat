@@ -38,9 +38,17 @@ PROGRESS_FILE = os.path.join(SCRIPTS_DIR, "progress.json")
 # チャンネル情報
 CHANNEL_URL = "https://www.youtube.com/@mashi_rone"
 
-# 除外リスト（不備のある配信など、収集対象から永久に除外する動画ID）
+# 除外リスト（チャットリプレイなし・データ不備等、収集対象から除外する動画ID）
 EXCLUDED_IDS = {
-    "rPgWLBgZfqE",  # 2024/05/09 配信 - データ不備
+    "cI8yaCSXOEU",  # ノロイヅキ - チャットリプレイなし
+    "TNIS-orv9TM",  # 朝活(2025/02/24) - チャットリプレイなし
+    "bB727Jk2cfU",  # 復帰最初の朝活(2025/02/23) - チャットリプレイなし
+    "lbFl-iYnQSY",  # バレンタイン(2025/02/14) - チャットリプレイなし
+    "Eas56ISi4YI",  # メンシ1周年(2025/02/12) - チャットリプレイなし
+    "ylu_xCKvd4Y",  # 朝活(2025/02/02) - チャットリプレイなし
+    "9IvnmocUM6I",  # ワンちゃんお別れ - 実質メン限
+    "OLpbjKJTFXw",  # Re≒Connect(2024/05/26) - チャットリプレイなし
+    "D8n7BX8rMhA",  # バーチャル物産展(2024/04/05) - チャットリプレイなし
 }
 
 # メンバー限定配信のタイトルキーワード（チャット取得不可のため除外）
@@ -170,7 +178,6 @@ def download_live_chat(video_id):
         "--skip-download",
         "--write-subs",
         "--sub-langs", "live_chat",
-        "--sub-format", "json3",
         "-o", output_path,
         url,
     ]
@@ -179,9 +186,8 @@ def download_live_chat(video_id):
                             encoding='utf-8', errors='replace',
                             timeout=180, env=_utf8_env())
 
-    if result.returncode != 0:
-        return None
-
+    # yt-dlp は DL 成功でも returncode!=0 を返す場合がある
+    # ファイル存在で成否を判定する
     files = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
     return files[0] if files else None
 
