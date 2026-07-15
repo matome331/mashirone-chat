@@ -287,7 +287,7 @@
     const READING_RE_TEST = /[A-Za-zａ-ｚＡ-Ｚ\u4e00-\u9fffァ-ヶ]+[（(][ぁ-ゖァ-ヶー]+[）)]/;       // フィルタ判定用（gなし）
     const READING_RE_HIGHLIGHT = /[A-Za-zａ-ｚＡ-Ｚ\u4e00-\u9fffァ-ヶ]+[（(][ぁ-ゖァ-ヶー]+[）)]/g; // ハイライト用（gあり）
     // 誤読検索から除外する括弧内の表現（読み仮名ではないもの）
-    const READING_IGNORE = ['ドヤァ', 'ザシュ'];
+    const READING_IGNORE = ['ドヤァ', 'ザシュ', 'ボキッ'];
 
     // ===== 検索 =====
     function search(query, sortOrder) {
