@@ -284,9 +284,10 @@
     // 読み仮名パターンの正規表現（漢字/英字/カタカナ + （ひらがな/カタカナ））
     // 前半にひらがなを含めないことで、ふか(いねむ) 等の誤検出を防ぎ、
     // 「は」等の助詞で区切れるので「英語は未来永劫(えいごう)」が「未来永劫(えいごう)」だけになる
-    // 括弧内にひらがなを1文字以上含むことを必須にし、(ドヤァ) 等の純カタカナ表現を除外
-    const READING_RE_TEST = /[A-Za-zａ-ｚＡ-Ｚ\u4e00-\u9fffァ-ヶ]+[（(](?=[ぁ-ゖァ-ヶー]*[ぁ-ゖ])[ぁ-ゖァ-ヶー]+[）)]/;       // フィルタ判定用（gなし）
-    const READING_RE_HIGHLIGHT = /[A-Za-zａ-ｚＡ-Ｚ\u4e00-\u9fffァ-ヶ]+[（(](?=[ぁ-ゖァ-ヶー]*[ぁ-ゖ])[ぁ-ゖァ-ヶー]+[）)]/g; // ハイライト用（gあり）
+    const READING_RE_TEST = /[A-Za-zａ-ｚＡ-Ｚ\u4e00-\u9fffァ-ヶ]+[（(][ぁ-ゖァ-ヶー]+[）)]/;       // フィルタ判定用（gなし）
+    const READING_RE_HIGHLIGHT = /[A-Za-zａ-ｚＡ-Ｚ\u4e00-\u9fffァ-ヶ]+[（(][ぁ-ゖァ-ヶー]+[）)]/g; // ハイライト用（gあり）
+    // 誤読検索から除外する括弧内の表現（読み仮名ではないもの）
+    const READING_IGNORE = ['ドヤァ'];
 
     // ===== 検索 =====
     function search(query, sortOrder) {
@@ -327,7 +328,13 @@
 
         // 読み仮名パターンフィルタ
         if (state.readingFilter) {
-            results = results.filter(msg => READING_RE_TEST.test(msg.m));
+            results = results.filter(msg => {
+                if (!READING_RE_TEST.test(msg.m)) return false;
+                // 無視リストに含まれるマッチだけの場合は除外
+                const matches = msg.m.match(READING_RE_HIGHLIGHT);
+                if (!matches) return false;
+                return matches.some(m => !READING_IGNORE.some(ig => m.includes(ig)));
+            });
         }
 
         // 日付・時間ソート
