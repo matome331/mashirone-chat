@@ -27,4 +27,6 @@ jobs:
         run: python scripts/health_check.py
 
       - name: Check Python syntax
-        run: python -m compileall -q scripts
+        run: |
+          python -m compileall -q scripts
+          python -m py_compile update_chat_gui.py
