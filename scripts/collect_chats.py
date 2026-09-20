@@ -34,7 +34,8 @@ RAW_DIR = os.path.join(SCRIPTS_DIR, "raw_chats")
 DATA_DIR = os.path.join(REPO_ROOT, "data")
 CHUNKS_DIR = os.path.join(DATA_DIR, "chunks")
 INDEX_FILE = os.path.join(DATA_DIR, "index.json")
-PROGRESS_FILE = os.path.join(SCRIPTS_DIR, "progress.json")
+DEFAULT_SCAN_LIMIT = 100
+DEFAULT_SKIP_RECENT = 3
 
 # チャンネル情報
 CHANNEL_URL = "https://www.youtube.com/@mashi_rone"
@@ -64,18 +65,6 @@ os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(CHUNKS_DIR, exist_ok=True)
 
 
-def load_progress():
-    if os.path.exists(PROGRESS_FILE):
-        with open(PROGRESS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {"completed": [], "failed": [], "video_list": []}
-
-
-def save_progress(progress):
-    with open(PROGRESS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(progress, f, ensure_ascii=False, indent=2)
-
-
 def load_existing_index():
     """既存の index.json を読み込み、処理済み動画IDのセットを返す"""
     if os.path.exists(INDEX_FILE):
@@ -85,8 +74,11 @@ def load_existing_index():
     return set(), []
 
 
-def get_video_list_from_channel(limit=10):
-    """yt-dlp でチャンネルの動画一覧を取得（ライブ配信 + 通常動画）"""
+def get_video_list_from_channel(scan_limit=DEFAULT_SCAN_LIMIT):
+    """yt-dlp でチャンネルの動画一覧を取得（ライブ配信 + 通常動画）。
+
+    scan_limit=None のときだけ全件取得する。通常更新では最新側だけ確認する。
+    """
     print(f"  チャンネルから動画リスト取得中... ({CHANNEL_URL})")
 
     seen_ids = set()
@@ -100,16 +92,24 @@ def get_video_list_from_channel(limit=10):
             "--flat-playlist",
             "--encoding", "utf-8",
             "--print", "%(id)s\t%(title)s\t%(duration)s",
-            CHANNEL_URL + tab,
         ]
+        if scan_limit is not None:
+            cmd.extend(["--playlist-end", str(scan_limit)])
+        cmd.append(CHANNEL_URL + tab)
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True,
                                     encoding='utf-8', errors='replace',
                                     timeout=300, env=_utf8_env())
-        except subprocess.TimeoutExpired:
-            print(f"    → {tab} タイムアウト、スキップ")
-            continue
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"{tab} の動画一覧取得がタイムアウトしました") from exc
+
+        if result.returncode != 0:
+            stderr_tail = "\n".join(result.stderr.strip().splitlines()[-8:])
+            raise RuntimeError(
+                f"{tab} の動画一覧取得に失敗しました (exit {result.returncode})"
+                + (f"\n{stderr_tail}" if stderr_tail else "")
+            )
 
         tab_count = 0
         for line in result.stdout.strip().split('\n'):
@@ -276,7 +276,13 @@ def update_index(existing_index, new_entries):
     return combined
 
 
-def collect_and_process(limit=10, sleep_sec=5):
+def collect_and_process(
+    limit=10,
+    sleep_sec=5,
+    scan_limit=DEFAULT_SCAN_LIMIT,
+    full_scan=False,
+    skip_recent=DEFAULT_SKIP_RECENT,
+):
     """メインの収集・処理パイプライン（差分収集）"""
 
     print("=" * 60)
@@ -287,10 +293,13 @@ def collect_and_process(limit=10, sleep_sec=5):
     existing_ids, existing_index = load_existing_index()
     print(f"  既存データ: {len(existing_ids)}本")
 
-    progress = load_progress()
-
     # チャンネルから動画リスト取得
-    all_videos = get_video_list_from_channel(limit=None)  # 全件取得
+    effective_scan_limit = None if full_scan else scan_limit
+    if full_scan:
+        print("  一覧走査: 全件モード")
+    else:
+        print(f"  一覧走査: 各タブ最新{scan_limit}件まで")
+    all_videos = get_video_list_from_channel(scan_limit=effective_scan_limit)
 
     # 未処理の動画だけフィルタリング（除外リスト・メン限も除外）
     new_videos = [v for v in all_videos
@@ -304,11 +313,17 @@ def collect_and_process(limit=10, sleep_sec=5):
 
     # 最新の数本はチャットリプレイが未生成の可能性があるためスキップ
     # (yt-dlp は新しい順で返すので、先頭が最新)
-    SKIP_RECENT = 3
-    if len(new_videos) > SKIP_RECENT:
-        skipped = new_videos[:SKIP_RECENT]
-        new_videos = new_videos[SKIP_RECENT:]
-        print(f"  直近{SKIP_RECENT}本はスキップ（チャットリプレイ未生成の可能性）")
+    if skip_recent > 0 and new_videos:
+        skip_count = min(skip_recent, len(new_videos))
+        new_videos = new_videos[skip_count:]
+        print(
+            f"  直近{skip_count}本はスキップ"
+            "（チャットリプレイ未生成の可能性）"
+        )
+
+    if not new_videos:
+        print("  収集対象はありません（直近スキップ分のみ）。")
+        return
 
     print(f"  新規収集対象: {len(new_videos)}本（成功{limit}本で終了）")
 
@@ -409,9 +424,18 @@ if __name__ == '__main__':
                        help='処理する動画数の上限 (default: 10)')
     parser.add_argument('--sleep', type=int, default=5,
                        help='動画間のスリープ秒数 (default: 5)')
+    parser.add_argument('--scan-limit', type=int, default=DEFAULT_SCAN_LIMIT,
+                       help=f'通常更新で各タブの最新何件を見るか (default: {DEFAULT_SCAN_LIMIT})')
+    parser.add_argument('--full-scan', action='store_true',
+                       help='復旧・棚卸し用。チャンネル一覧を全件確認する')
+    parser.add_argument('--skip-recent', type=int, default=DEFAULT_SKIP_RECENT,
+                       help=f'チャットリプレイ待ちで直近何本を保留するか (default: {DEFAULT_SKIP_RECENT})')
     args = parser.parse_args()
 
     collect_and_process(
         limit=args.limit,
         sleep_sec=args.sleep,
+        scan_limit=args.scan_limit,
+        full_scan=args.full_scan,
+        skip_recent=args.skip_recent,
     )
