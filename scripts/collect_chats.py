@@ -34,6 +34,7 @@ RAW_DIR = os.path.join(SCRIPTS_DIR, "raw_chats")
 DATA_DIR = os.path.join(REPO_ROOT, "data")
 CHUNKS_DIR = os.path.join(DATA_DIR, "chunks")
 INDEX_FILE = os.path.join(DATA_DIR, "index.json")
+FAILURE_LEDGER_FILE = os.path.join(SCRIPTS_DIR, "collection_failures.json")
 DEFAULT_SCAN_LIMIT = 100
 DEFAULT_SKIP_RECENT = 3
 
@@ -63,6 +64,141 @@ def is_members_only(title):
 
 os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(CHUNKS_DIR, exist_ok=True)
+
+
+def load_failure_ledger():
+    """失敗動画の台帳を読み込む。壊れている場合は安全側でエラーにする。"""
+    if not os.path.exists(FAILURE_LEDGER_FILE):
+        return {"version": 1, "failures": {}}
+
+    with open(FAILURE_LEDGER_FILE, 'r', encoding='utf-8') as f:
+        ledger = json.load(f)
+
+    if not isinstance(ledger, dict) or not isinstance(ledger.get("failures"), dict):
+        raise ValueError(
+            f"失敗台帳の形式が不正です: {FAILURE_LEDGER_FILE}"
+        )
+    ledger.setdefault("version", 1)
+    return ledger
+
+
+def save_failure_ledger(ledger):
+    """失敗台帳をatomic writeする。"""
+    temp_path = FAILURE_LEDGER_FILE + ".tmp"
+    with open(temp_path, 'w', encoding='utf-8') as f:
+        json.dump(ledger, f, ensure_ascii=False, indent=2)
+    os.replace(temp_path, FAILURE_LEDGER_FILE)
+
+
+def record_failure(video_id, title, reason, detail=""):
+    """動画単位の失敗を記録し、同じ動画なら試行回数を加算する。"""
+    ledger = load_failure_ledger()
+    failures = ledger["failures"]
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    previous = failures.get(video_id, {})
+
+    clean_detail = re.sub(r"\s+", " ", str(detail or "")).strip()
+    if len(clean_detail) > 1000:
+        clean_detail = clean_detail[:997] + "..."
+
+    failures[video_id] = {
+        "video_id": video_id,
+        "title": title or previous.get("title", ""),
+        "reason": reason,
+        "detail": clean_detail,
+        "attempts": int(previous.get("attempts", 0)) + 1,
+        "first_failed_at": previous.get("first_failed_at", now),
+        "last_failed_at": now,
+    }
+    save_failure_ledger(ledger)
+
+
+def clear_failures(video_ids):
+    """取得成功した動画を失敗台帳から削除する。"""
+    ids = set(video_ids)
+    if not ids:
+        return 0
+
+    ledger = load_failure_ledger()
+    failures = ledger["failures"]
+    removed = 0
+    for video_id in ids:
+        if failures.pop(video_id, None) is not None:
+            removed += 1
+
+    if removed:
+        save_failure_ledger(ledger)
+    return removed
+
+
+def classify_download_failure(stderr_text):
+    """yt-dlpのstderrを大まかな失敗種別へ分類する。"""
+    text = (stderr_text or "").lower()
+
+    if any(token in text for token in (
+        "sign in to confirm you're not a bot",
+        "sign in to confirm you’re not a bot",
+        "po token",
+        "http error 403",
+        "too many requests",
+        "http error 429",
+    )):
+        return "youtube_access_blocked"
+
+    if any(token in text for token in (
+        "private video",
+        "members-only",
+        "members only",
+        "join this channel",
+    )):
+        return "private_or_members_only"
+
+    if any(token in text for token in (
+        "live chat replay is not available",
+        "there are no subtitles",
+        "no subtitles for the requested languages",
+        "does not have any subtitles",
+    )):
+        return "chat_replay_unavailable"
+
+    if any(token in text for token in (
+        "video unavailable",
+        "video is unavailable",
+        "removed",
+        "not exist",
+    )):
+        return "video_unavailable"
+
+    return "yt_dlp_error"
+
+
+def show_failures():
+    """失敗台帳を人間向けに表示する。"""
+    ledger = load_failure_ledger()
+    failures = list(ledger["failures"].values())
+    failures.sort(key=lambda x: x.get("last_failed_at", ""), reverse=True)
+
+    print("=" * 60)
+    print("  ミミィチャット検索 - 失敗動画台帳")
+    print("=" * 60)
+    if not failures:
+        print("  失敗記録はありません。")
+        return
+
+    print(f"  記録件数: {len(failures)}本")
+    for item in failures:
+        print(
+            f"  - {item.get('video_id', '')} | "
+            f"{item.get('reason', 'unknown')} | "
+            f"{item.get('attempts', 0)}回 | "
+            f"{item.get('last_failed_at', '')}"
+        )
+        title = item.get("title", "")
+        if title:
+            print(f"    {title[:80]}")
+        detail = item.get("detail", "")
+        if detail:
+            print(f"    {detail[:200]}")
 
 
 def load_existing_index():
@@ -248,14 +384,14 @@ def get_video_upload_date(video_id):
 def download_live_chat(video_id, force=False):
     """1つの動画のライブチャットをダウンロード。
 
-    force=True の場合は既存rawを残したまま一時ファイルへ再取得し、
-    呼び出し側が内容確認後に差し替えられるようにする。
+    戻り値は (filepath, failure_reason, failure_detail)。
+    force=True の場合は既存rawを残したまま一時ファイルへ再取得する。
     """
     url = f"https://www.youtube.com/watch?v={video_id}"
     existing = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
 
     if existing and not force:
-        return existing[0]
+        return existing[0], None, ""
 
     if force:
         output_path = os.path.join(
@@ -274,9 +410,18 @@ def download_live_chat(video_id, force=False):
         url,
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True,
-                            encoding='utf-8', errors='replace',
-                            timeout=180, env=_utf8_env())
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            timeout=180,
+            env=_utf8_env(),
+        )
+    except subprocess.TimeoutExpired:
+        return None, "timeout", "ライブチャット取得が180秒でタイムアウト"
 
     # yt-dlp は DL 成功でも returncode!=0 を返す場合があるため、
     # 実ファイルの存在で成否を判定する。
@@ -286,12 +431,13 @@ def download_live_chat(video_id, force=False):
         files = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
 
     if files:
-        return files[0]
+        return files[0], None, ""
 
-    if result.stderr.strip():
-        stderr_tail = "\n".join(result.stderr.strip().splitlines()[-8:])
+    stderr_tail = "\n".join(result.stderr.strip().splitlines()[-8:])
+    reason = classify_download_failure(stderr_tail)
+    if stderr_tail:
         print(f"    yt-dlp: {stderr_tail}")
-    return None
+    return None, reason, stderr_tail or f"yt-dlp exit {result.returncode}"
 
 
 def promote_raw_chat(video_id, refreshed_path):
@@ -410,10 +556,19 @@ def recollect_single_video(video_ref):
         None,
     )
 
-    metadata = get_video_metadata(video_id)
-    title = metadata.get('title') or (
-        existing_entry.get('title', '') if existing_entry else ''
-    )
+    existing_title = existing_entry.get('title', '') if existing_entry else ''
+    try:
+        metadata = get_video_metadata(video_id)
+    except Exception as exc:
+        record_failure(
+            video_id,
+            existing_title,
+            "metadata_error",
+            str(exc),
+        )
+        raise
+
+    title = metadata.get('title') or existing_title
     duration = metadata.get('duration') or (
         existing_entry.get('duration', 0) if existing_entry else 0
     )
@@ -429,8 +584,16 @@ def recollect_single_video(video_ref):
     print("  ライブチャットを再ダウンロード中...")
     refreshed_path = None
     try:
-        refreshed_path = download_live_chat(video_id, force=True)
+        refreshed_path, failure_reason, failure_detail = download_live_chat(
+            video_id, force=True
+        )
         if not refreshed_path:
+            record_failure(
+                video_id,
+                title,
+                failure_reason or "download_failed",
+                failure_detail,
+            )
             raise RuntimeError(
                 "ライブチャットを再取得できませんでした。"
                 "既存のchunk/indexは変更していません。"
@@ -439,6 +602,12 @@ def recollect_single_video(video_ref):
         messages = parse_live_chat(refreshed_path)
         print(f"  再取得メッセージ数: {len(messages)}")
         if not messages:
+            record_failure(
+                video_id,
+                title,
+                "empty_parse",
+                "再取得したrawからメッセージを1件も抽出できませんでした",
+            )
             raise RuntimeError(
                 "再取得データからメッセージを抽出できませんでした。"
                 "既存のchunk/indexは変更していません。"
@@ -525,6 +694,7 @@ def recollect_single_video(video_ref):
                     except OSError:
                         pass
 
+        clear_failures([video_id])
         print("  ✅ 再取得完了")
         print(f"  chunk: data/chunks/{video_id}.json")
         print(f"  index: {len(combined_index)}動画")
@@ -603,15 +773,19 @@ def collect_and_process(
 
         # 1. ダウンロード
         print(f"    チャットダウンロード中...")
-        try:
-            filepath = download_live_chat(vid_id)
-        except subprocess.TimeoutExpired:
-            print(f"    → タイムアウト（スキップ）")
-            time.sleep(sleep_sec)
-            continue
+        filepath, failure_reason, failure_detail = download_live_chat(vid_id)
 
         if not filepath:
-            print(f"    → チャットなし or エラー（スキップ）")
+            record_failure(
+                vid_id,
+                video.get('title', ''),
+                failure_reason or "download_failed",
+                failure_detail,
+            )
+            print(
+                f"    → 取得失敗: {failure_reason or 'download_failed'}"
+                "（台帳に記録してスキップ）"
+            )
             time.sleep(sleep_sec)
             continue
 
@@ -621,6 +795,13 @@ def collect_and_process(
         print(f"    → {len(messages)} メッセージ")
 
         if not messages:
+            record_failure(
+                vid_id,
+                video.get('title', ''),
+                "empty_parse",
+                "rawからメッセージを1件も抽出できませんでした",
+            )
+            print("    → パース結果0件（台帳に記録してスキップ）")
             time.sleep(sleep_sec)
             continue
 
@@ -669,6 +850,9 @@ def collect_and_process(
             json.dump(combined_index, f, ensure_ascii=False, indent=2)
 
         print(f"  インデックス更新完了: {len(combined_index)}動画 (+{len(new_entries)}本)")
+        cleared = clear_failures(entry['id'] for entry in new_entries)
+        if cleared:
+            print(f"  失敗台帳から解消済み {cleared}本を削除")
 
     # サマリー
     print(f"\n{'=' * 60}")
@@ -676,6 +860,8 @@ def collect_and_process(
     print(f"{'=' * 60}")
     print(f"  新規収集: {len(new_entries)}本")
     print(f"  合計: {len(existing_ids) + len(new_entries)}本")
+    failure_count = len(load_failure_ledger()["failures"])
+    print(f"  失敗台帳: {failure_count}本")
 
 
 if __name__ == '__main__':
@@ -693,9 +879,13 @@ if __name__ == '__main__':
                        help=f'チャットリプレイ待ちで直近何本を保留するか (default: {DEFAULT_SKIP_RECENT})')
     parser.add_argument('--video',
                        help='指定したYouTube URLまたは動画IDだけを再取得する')
+    parser.add_argument('--show-failures', action='store_true',
+                       help='失敗動画台帳を表示して終了する')
     args = parser.parse_args()
 
-    if args.video:
+    if args.show_failures:
+        show_failures()
+    elif args.video:
         recollect_single_video(args.video)
     else:
         collect_and_process(
