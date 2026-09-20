@@ -387,7 +387,7 @@ class ChatUpdateApp:
 
         self._append_log("\n[停止要求] 実行中の処理を終了します…\n")
         try:
-            process.terminate()
+            self._terminate_process_tree(process)
         except OSError as exc:
             self._append_log(f"[ERROR] 停止できませんでした: {exc}\n")
 
@@ -415,7 +415,11 @@ class ChatUpdateApp:
         self.current_process = None
         self.progress.stop()
         self.stop_btn.configure(state="disabled")
-        self._set_actions_enabled(True)
+
+        if environment_setup and return_code != 0:
+            self._set_actions_enabled(False)
+        else:
+            self._set_actions_enabled(True)
 
         if return_code == 0:
             self.status_var.set(f"{label} 完了")
@@ -460,11 +464,37 @@ class ChatUpdateApp:
             process = self.current_process
             if process is not None:
                 try:
-                    process.terminate()
+                    self._terminate_process_tree(process)
                 except OSError:
                     pass
 
         self.root.destroy()
+
+    def _terminate_process_tree(self, process: subprocess.Popen[str]) -> None:
+        """Windowsでは子プロセスも含めて停止する。"""
+        if process.poll() is not None:
+            return
+
+        if os.name == "nt":
+            subprocess.run(
+                [
+                    "taskkill",
+                    "/PID",
+                    str(process.pid),
+                    "/T",
+                    "/F",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                creationflags=(
+                    subprocess.CREATE_NO_WINDOW
+                    if hasattr(subprocess, "CREATE_NO_WINDOW")
+                    else 0
+                ),
+            )
+        else:
+            process.terminate()
 
 
 def main() -> int:
