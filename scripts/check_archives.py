@@ -267,6 +267,11 @@ def print_summary(report: dict) -> None:
 
     print(f"\n  結果保存: {REPORT_FILE}")
     print("  ※ 非公開候補は自動削除していません。")
+    if report["candidates"]:
+        print(
+            "  ※ 候補はChatで確認後、承認した動画IDだけ "
+            "excluded_videos.txt に追加します。"
+        )
 
 
 def main(*, sleep_sec: float, restart: bool) -> int:
