@@ -14,6 +14,7 @@ GUI機能:
 - 失敗動画台帳の表示
 - データ健康診断
 - GitHubへ公開（公開データだけcommit/push）
+- 全件公開状態チェック
 - 実行ログの画面内表示
 - 実行中の停止
 
@@ -279,3 +280,42 @@ python scripts\publish_data.py
 
 これにより、公開後に古いindex/chunkを掴み続ける問題を避けつつ、
 全chunkを無条件に毎回再ダウンロードする方式にはしていません。
+
+## 全件公開状態チェック
+
+GUIの「全件公開状態チェック」は、`data/index.json` に登録済みの全配信について
+現在もYouTubeで確認できるかをローカルPCから順番に確認します。
+
+想定用途は3〜6か月に1回程度の手動メンテナンスです。
+
+分類:
+
+- 公開中 — public / unlisted
+- 非公開候補 — private / members-only / 明示的な削除メッセージなど
+- 確認不能 — bot判定、403/429、タイムアウト、通信エラー、曖昧なエラー
+
+重要:
+
+- 非公開候補を見つけても `index.json` / chunk は自動削除しません
+- bot判定や通信エラーを「非公開」とは扱いません
+- 動画間は標準2秒待機します
+- 途中経過は `scripts/archive_check_state.json` にローカル保存します
+- 途中停止した場合、次回同じボタンから続きへ再開します
+- 全件完了後にもう一度実行すると、新しい全件チェックとして最初から確認します
+- 結果は `scripts/archive_check_report.json` にローカル保存します
+- state/reportはGit管理対象外です
+
+確認不能が8本連続した場合は、YouTube側の一時制限の可能性を考えて自動停止します。
+その8本は未確認へ戻すため、時間を空けて再実行するとそこから再試行できます。
+
+コマンドから実行する場合:
+
+```bat
+python scripts\check_archives.py --sleep 2
+```
+
+途中結果を無視して最初からやり直す場合:
+
+```bat
+python scripts\check_archives.py --restart --sleep 2
+```
