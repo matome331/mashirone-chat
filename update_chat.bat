@@ -116,10 +116,10 @@ echo Python 3 をインストールしてから再実行してください。
 exit /b 1
 
 :check_ytdlp
-where yt-dlp > nul 2>&1
+call %PYTHON_CMD% -m yt_dlp --version > nul 2>&1
 if not errorlevel 1 exit /b 0
 
-echo [!] yt-dlp が見つかりません。
+echo [!] yt-dlp がPython環境に見つかりません。
 echo.
 set /p "install_ytdlp=今インストールしますか？ (y/N): "
 if /I not "%install_ytdlp%"=="y" (
@@ -138,11 +138,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
-where yt-dlp > nul 2>&1
+call %PYTHON_CMD% -m yt_dlp --version > nul 2>&1
 if errorlevel 1 (
     echo.
-    echo [ERROR] yt-dlp をインストールしましたが、コマンドがPATHに見つかりません。
-    echo 新しいコマンドプロンプトで再度お試しください。
+    echo [ERROR] yt-dlp をインストールしましたが、Pythonから読み込めません。
     exit /b 1
 )
 
