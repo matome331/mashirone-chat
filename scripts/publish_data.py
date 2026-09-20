@@ -24,7 +24,7 @@ ALLOWED_EXACT = {
 }
 ALLOWED_PREFIXES = (
     "data/chunks/",
-,)
+)
 
 
 def creation_flags() -> int:
