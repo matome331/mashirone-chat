@@ -74,7 +74,7 @@ GitHub-hosted runner上では、YouTube側のbot判定・共有データセン�
 1. 取得済み判定を明文化・安定化 — 完了
 2. 新規配信だけを差分収集する更新モード — 完了
 3. 特定動画の再取得モード — 完了
-4. 失敗動画・失敗理由を記録する台帳
+4. 失敗動画・失敗理由を記録する台帳 — 完了
 5. Windowsでワンクリック実行できる更新バッチ
 6. 取得後のデータ健康診断
 
@@ -116,3 +116,39 @@ GitHub-hosted runner上では、YouTube側のbot判定・共有データセン�
 7. 途中で失敗した場合はchunk/indexを元に戻す
 
 既存indexにない動画を指定した場合は、取得成功時に新規動画としてindexへ追加されます。
+
+## 失敗動画台帳
+
+収集に失敗した動画は `scripts/collection_failures.json` に記録します。
+
+記録内容:
+
+- 動画ID
+- タイトル
+- 失敗種別
+- エラー詳細（最大1000文字）
+- 試行回数
+- 初回失敗時刻
+- 最終失敗時刻
+
+主な失敗種別:
+
+- `timeout` — yt-dlp取得タイムアウト
+- `youtube_access_blocked` — bot判定 / PO Token / 403 / 429など
+- `chat_replay_unavailable` — ライブチャットリプレイなし
+- `private_or_members_only` — 非公開・メンバー限定
+- `video_unavailable` — 削除・利用不可
+- `empty_parse` — rawは取れたがメッセージ0件
+- `yt_dlp_error` — その他のyt-dlpエラー
+
+台帳だけ確認する場合:
+
+```bat
+python scripts\collect_chats.py --show-failures
+```
+
+同じ動画が再び失敗した場合は `attempts` を加算します。
+通常収集または `--video` 再取得で成功した動画は、失敗台帳から自動的に削除します。
+
+直近配信をチャットリプレイ待ちで保留しただけの場合や、
+`EXCLUDED_IDS` / メン限タイトル判定で意図的に除外した動画は失敗台帳へ入れません。
