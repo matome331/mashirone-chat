@@ -5,6 +5,7 @@
 対象:
 - data/index.json
 - data/chunks/
+- excluded_videos.txt
 それ以外の変更はstage/commitしない。
 mainがorigin/mainよりbehindの場合や、未公開の非データcommitがある場合は中断する。
 """
@@ -21,6 +22,7 @@ HEALTH_SCRIPT = os.path.join(REPO_ROOT, "scripts", "health_check.py")
 
 ALLOWED_EXACT = {
     "data/index.json",
+    "excluded_videos.txt",
 }
 ALLOWED_PREFIXES = (
     "data/chunks/",
@@ -175,6 +177,7 @@ def stage_publish_data() -> None:
         "--",
         "data/index.json",
         "data/chunks",
+        "excluded_videos.txt",
         capture=False,
     )
 
