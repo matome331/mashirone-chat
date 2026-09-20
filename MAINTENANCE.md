@@ -25,6 +25,21 @@ python scripts\collect_chats.py --full-scan --limit 0 --sleep 5
 python scripts\collect_chats.py --scan-limit 200
 ```
 
+特定の1配信だけ再取得したい場合:
+
+```bat
+python scripts\collect_chats.py --video "https://www.youtube.com/watch?v=XXXXXXXXXXX"
+```
+
+動画IDだけでも指定できます。
+
+```bat
+python scripts\collect_chats.py --video XXXXXXXXXXX
+```
+
+単一動画モードは通常の取得済み判定や直近スキップを無視して、その動画だけを再取得します。
+再取得・パースに失敗した場合は既存のchunk/indexを変更しません。
+
 GitHub Pagesの公開処理はそのまま利用します。
 
 ## GitHub Actionsでのyt-dlp自動収集をやめる理由
@@ -58,7 +73,7 @@ GitHub-hosted runner上では、YouTube側のbot判定・共有データセン�
 
 1. 取得済み判定を明文化・安定化 — 完了
 2. 新規配信だけを差分収集する更新モード — 完了
-3. 特定動画の再取得モード
+3. 特定動画の再取得モード — 完了
 4. 失敗動画・失敗理由を記録する台帳
 5. Windowsでワンクリック実行できる更新バッチ
 6. 取得後のデータ健康診断
@@ -78,3 +93,26 @@ GitHub-hosted runner上では、YouTube側のbot判定・共有データセン�
 
 チャンネル一覧のyt-dlp取得自体に失敗した場合は、更新処理をエラー終了します。
 「一覧取得失敗」を「新しい動画なし」と誤判定しません。
+
+## 特定動画の再取得
+
+`--video` は次の形式を受け付けます。
+
+- 11文字のYouTube動画ID
+- `youtube.com/watch?v=...`
+- `youtu.be/...`
+- `youtube.com/live/...`
+- `youtube.com/shorts/...`
+- `youtube.com/embed/...`
+
+再取得時は:
+
+1. 動画メタデータを取得
+2. 既存rawを残したまま一時rawへチャットを再取得
+3. 1件以上のメッセージをパースできたことを確認
+4. chunk/indexを一時ファイルへ生成
+5. 既存chunk/indexをバックアップして差し替え
+6. 正常完了後だけrawも新しいデータへ差し替え
+7. 途中で失敗した場合はchunk/indexを元に戻す
+
+既存indexにない動画を指定した場合は、取得成功時に新規動画としてindexへ追加されます。
