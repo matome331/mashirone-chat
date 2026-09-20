@@ -144,6 +144,86 @@ def get_video_list_from_channel(scan_limit=DEFAULT_SCAN_LIMIT):
     return videos
 
 
+def normalize_video_id(value):
+    """YouTube URL または11文字の動画IDから動画IDを取り出す。"""
+    value = value.strip()
+    if re.fullmatch(r"[A-Za-z0-9_-]{11}", value):
+        return value
+
+    patterns = [
+        r"[?&]v=([A-Za-z0-9_-]{11})",
+        r"youtu\.be/([A-Za-z0-9_-]{11})",
+        r"/(?:shorts|live|embed)/([A-Za-z0-9_-]{11})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, value)
+        if match:
+            return match.group(1)
+
+    raise ValueError(f"YouTube動画IDを取得できません: {value}")
+
+
+def get_video_metadata(video_id):
+    """単一動画のタイトル・長さ・配信日をyt-dlpから取得する。"""
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    cmd = [
+        "yt-dlp",
+        "--skip-download",
+        "--encoding", "utf-8",
+        "--print", "%(id)s",
+        "--print", "%(title)s",
+        "--print", "%(duration)s",
+        "--print", "%(upload_date)s",
+        url,
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            timeout=60,
+            env=_utf8_env(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"動画情報の取得がタイムアウトしました: {video_id}") from exc
+
+    if result.returncode != 0:
+        stderr_tail = "\n".join(result.stderr.strip().splitlines()[-8:])
+        raise RuntimeError(
+            f"動画情報の取得に失敗しました: {video_id}"
+            + (f"\n{stderr_tail}" if stderr_tail else "")
+        )
+
+    lines = result.stdout.splitlines()
+    if len(lines) < 4:
+        raise RuntimeError(f"動画情報を解析できませんでした: {video_id}")
+
+    resolved_id, title, duration_raw, upload_date_raw = lines[-4:]
+    if resolved_id != video_id:
+        video_id = resolved_id
+
+    try:
+        duration = float(duration_raw) if duration_raw != 'NA' else 0
+    except ValueError:
+        duration = 0
+
+    date_str = ""
+    if re.fullmatch(r"\d{8}", upload_date_raw):
+        date_str = (
+            f"{upload_date_raw[:4]}/{upload_date_raw[4:6]}/{upload_date_raw[6:8]}"
+        )
+
+    return {
+        "id": video_id,
+        "title": title,
+        "duration": duration,
+        "date": date_str,
+    }
+
+
 def get_video_upload_date(video_id):
     """yt-dlp で動画の配信日を取得"""
     cmd = [
@@ -165,15 +245,25 @@ def get_video_upload_date(video_id):
     return ""
 
 
-def download_live_chat(video_id):
-    """1つの動画のライブチャットをダウンロード"""
-    output_path = os.path.join(RAW_DIR, f"chat_{video_id}")
-    url = f"https://www.youtube.com/watch?v={video_id}"
+def download_live_chat(video_id, force=False):
+    """1つの動画のライブチャットをダウンロード。
 
-    # 既にダウンロード済みか確認
+    force=True の場合は既存rawを残したまま一時ファイルへ再取得し、
+    呼び出し側が内容確認後に差し替えられるようにする。
+    """
+    url = f"https://www.youtube.com/watch?v={video_id}"
     existing = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
-    if existing:
+
+    if existing and not force:
         return existing[0]
+
+    if force:
+        output_path = os.path.join(
+            RAW_DIR,
+            f"chat_{video_id}_refresh_{time.time_ns()}",
+        )
+    else:
+        output_path = os.path.join(RAW_DIR, f"chat_{video_id}")
 
     cmd = [
         "yt-dlp",
@@ -188,10 +278,40 @@ def download_live_chat(video_id):
                             encoding='utf-8', errors='replace',
                             timeout=180, env=_utf8_env())
 
-    # yt-dlp は DL 成功でも returncode!=0 を返す場合がある
-    # ファイル存在で成否を判定する
-    files = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
-    return files[0] if files else None
+    # yt-dlp は DL 成功でも returncode!=0 を返す場合があるため、
+    # 実ファイルの存在で成否を判定する。
+    if force:
+        files = glob.glob(output_path + "*live_chat*")
+    else:
+        files = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
+
+    if files:
+        return files[0]
+
+    if result.stderr.strip():
+        stderr_tail = "\n".join(result.stderr.strip().splitlines()[-8:])
+        print(f"    yt-dlp: {stderr_tail}")
+    return None
+
+
+def promote_raw_chat(video_id, refreshed_path):
+    """検証済みの再取得rawを正式なrawファイルへ差し替える。"""
+    canonical_path = os.path.join(RAW_DIR, f"chat_{video_id}.live_chat.json")
+
+    # 先に新しいrawをatomic replaceし、成功後に古い別名rawを掃除する。
+    # replaceに失敗した場合は既存rawを消さない。
+    os.replace(refreshed_path, canonical_path)
+
+    old_files = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
+    for old_path in old_files:
+        if os.path.abspath(old_path) == os.path.abspath(canonical_path):
+            continue
+        try:
+            os.remove(old_path)
+        except OSError:
+            pass
+
+    return canonical_path
 
 
 def parse_live_chat(filepath):
@@ -274,6 +394,147 @@ def update_index(existing_index, new_entries):
         item['rank'] = len(combined) - i
 
     return combined
+
+
+def recollect_single_video(video_ref):
+    """指定した1動画だけライブチャットを再取得して安全に差し替える。"""
+    video_id = normalize_video_id(video_ref)
+    print("=" * 60)
+    print("  ミミィチャット検索 - 単一動画再取得")
+    print("=" * 60)
+    print(f"  対象動画ID: {video_id}")
+
+    _, existing_index = load_existing_index()
+    existing_entry = next(
+        (entry for entry in existing_index if entry.get('id') == video_id),
+        None,
+    )
+
+    metadata = get_video_metadata(video_id)
+    title = metadata.get('title') or (
+        existing_entry.get('title', '') if existing_entry else ''
+    )
+    duration = metadata.get('duration') or (
+        existing_entry.get('duration', 0) if existing_entry else 0
+    )
+    date_str = metadata.get('date') or (
+        existing_entry.get('date', '') if existing_entry else ''
+    )
+
+    print(f"  タイトル: {title}")
+    print(f"  既存登録: {'あり' if existing_entry else 'なし'}")
+    if existing_entry:
+        print(f"  既存メッセージ数: {existing_entry.get('count', 0)}")
+
+    print("  ライブチャットを再ダウンロード中...")
+    refreshed_path = None
+    try:
+        refreshed_path = download_live_chat(video_id, force=True)
+        if not refreshed_path:
+            raise RuntimeError(
+                "ライブチャットを再取得できませんでした。"
+                "既存のchunk/indexは変更していません。"
+            )
+
+        messages = parse_live_chat(refreshed_path)
+        print(f"  再取得メッセージ数: {len(messages)}")
+        if not messages:
+            raise RuntimeError(
+                "再取得データからメッセージを抽出できませんでした。"
+                "既存のchunk/indexは変更していません。"
+            )
+
+        timestamp = 0
+        if date_str:
+            try:
+                dt = datetime.strptime(date_str, '%Y/%m/%d')
+                timestamp = int(dt.timestamp())
+            except ValueError:
+                pass
+        elif existing_entry:
+            timestamp = existing_entry.get('timestamp', 0)
+
+        new_entry = {
+            'id': video_id,
+            'title': title,
+            'duration': duration,
+            'count': len(messages),
+            'date': date_str,
+            'timestamp': timestamp,
+        }
+
+        # chunk / index は両方を一時ファイルへ書いた後、バックアップを
+        # 作って差し替える。途中失敗時は元ファイルへロールバックする。
+        chunk_file = os.path.join(CHUNKS_DIR, f"{video_id}.json")
+        chunk_tmp = chunk_file + ".tmp"
+        index_tmp = INDEX_FILE + ".tmp"
+        chunk_backup = chunk_file + ".recollect.bak"
+        index_backup = INDEX_FILE + ".recollect.bak"
+
+        with open(chunk_tmp, 'w', encoding='utf-8') as f:
+            json.dump(messages, f, ensure_ascii=False, separators=(',', ':'))
+
+        combined_index = update_index(existing_index, [new_entry])
+        with open(index_tmp, 'w', encoding='utf-8') as f:
+            json.dump(combined_index, f, ensure_ascii=False, indent=2)
+
+        for backup in (chunk_backup, index_backup):
+            if os.path.exists(backup):
+                os.remove(backup)
+
+        had_chunk = os.path.exists(chunk_file)
+        chunk_backed_up = False
+        index_backed_up = False
+
+        try:
+            if had_chunk:
+                os.replace(chunk_file, chunk_backup)
+                chunk_backed_up = True
+
+            os.replace(INDEX_FILE, index_backup)
+            index_backed_up = True
+
+            os.replace(chunk_tmp, chunk_file)
+            os.replace(index_tmp, INDEX_FILE)
+            promote_raw_chat(video_id, refreshed_path)
+            refreshed_path = None
+        except Exception:
+            if os.path.exists(chunk_file):
+                os.remove(chunk_file)
+            if chunk_backed_up and os.path.exists(chunk_backup):
+                os.replace(chunk_backup, chunk_file)
+
+            if index_backed_up:
+                if os.path.exists(INDEX_FILE):
+                    os.remove(INDEX_FILE)
+                if os.path.exists(index_backup):
+                    os.replace(index_backup, INDEX_FILE)
+
+            for temp_path in (chunk_tmp, index_tmp):
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
+            raise
+        else:
+            for backup in (chunk_backup, index_backup):
+                if os.path.exists(backup):
+                    try:
+                        os.remove(backup)
+                    except OSError:
+                        pass
+
+        print("  ✅ 再取得完了")
+        print(f"  chunk: data/chunks/{video_id}.json")
+        print(f"  index: {len(combined_index)}動画")
+    finally:
+        # 検証前に失敗した一時rawは消し、既存rawを残す。
+        if refreshed_path and os.path.exists(refreshed_path):
+            try:
+                os.remove(refreshed_path)
+            except OSError:
+                pass
 
 
 def collect_and_process(
@@ -430,12 +691,17 @@ if __name__ == '__main__':
                        help='復旧・棚卸し用。チャンネル一覧を全件確認する')
     parser.add_argument('--skip-recent', type=int, default=DEFAULT_SKIP_RECENT,
                        help=f'チャットリプレイ待ちで直近何本を保留するか (default: {DEFAULT_SKIP_RECENT})')
+    parser.add_argument('--video',
+                       help='指定したYouTube URLまたは動画IDだけを再取得する')
     args = parser.parse_args()
 
-    collect_and_process(
-        limit=args.limit,
-        sleep_sec=args.sleep,
-        scan_limit=args.scan_limit,
-        full_scan=args.full_scan,
-        skip_recent=args.skip_recent,
-    )
+    if args.video:
+        recollect_single_video(args.video)
+    else:
+        collect_and_process(
+            limit=args.limit,
+            sleep_sec=args.sleep,
+            scan_limit=args.scan_limit,
+            full_scan=args.full_scan,
+            skip_recent=args.skip_recent,
+        )
