@@ -5,8 +5,6 @@
 対象:
 - data/index.json
 - data/chunks/
-- scripts/collection_failures.json
-
 それ以外の変更はstage/commitしない。
 mainがorigin/mainよりbehindの場合や、未公開の非データcommitがある場合は中断する。
 """
@@ -23,7 +21,6 @@ HEALTH_SCRIPT = os.path.join(REPO_ROOT, "scripts", "health_check.py")
 
 ALLOWED_EXACT = {
     "data/index.json",
-    "scripts/collection_failures.json",
 }
 ALLOWED_PREFIXES = (
     "data/chunks/",
@@ -178,7 +175,6 @@ def stage_publish_data() -> None:
         "--",
         "data/index.json",
         "data/chunks",
-        "scripts/collection_failures.json",
         capture=False,
     )
 
