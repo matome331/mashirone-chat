@@ -4,15 +4,19 @@
 
 YouTubeコメント/ライブチャットの取得は、GitHub ActionsではなくローカルPCで実行します。
 
-通常はリポジトリ直下の `update_chat.bat` をダブルクリックして実行します。
+通常はリポジトリ直下の `launch_update_chat_gui.bat` をダブルクリックしてGUIを起動します。
 
-メニュー:
+GUI機能:
 
-1. 通常更新
-2. 全件棚卸し
-3. 1配信だけ再取得
-4. 失敗動画台帳を見る
-5. 終了
+- 通常更新
+- 全件棚卸し
+- 1配信だけ再取得（URL / 動画ID入力）
+- 失敗動画台帳の表示
+- データ健康診断
+- 実行ログの画面内表示
+- 実行中の停止
+
+従来の `update_chat.bat` も非常用・トラブル時用として残します。
 
 バッチを使わずコマンドで通常更新する場合:
 
@@ -163,9 +167,23 @@ python scripts\collect_chats.py --show-failures
 直近配信をチャットリプレイ待ちで保留しただけの場合や、
 `EXCLUDED_IDS` / メン限タイトル判定で意図的に除外した動画は失敗台帳へ入れません。
 
-## Windows更新バッチ
+## Windows GUI更新ツール
 
-リポジトリ直下の `update_chat.bat` をダブルクリックすると更新メニューを開きます。
+リポジトリ直下の `launch_update_chat_gui.bat` をダブルクリックすると
+Tkinter製の更新GUIを起動します。
+
+GUI本体は `update_chat_gui.py` です。
+既存の `scripts/collect_chats.py` / `scripts/health_check.py` を子プロセスとして呼ぶため、
+収集ロジックをGUI側へ重複実装していません。
+
+通常更新・全件棚卸し・1配信だけ再取得が成功した場合は、自動で健康診断まで実行します。
+処理中の標準出力・エラー出力はGUI内のログ欄へ表示します。
+
+Tkinterが利用できない環境やGUI側のトラブル時は、従来の `update_chat.bat` を利用できます。
+
+## Windows更新バッチ（非常用）
+
+リポジトリ直下の `update_chat.bat` をダブルクリックすると従来のコンソールメニューを開きます。
 
 起動時に:
 
@@ -184,7 +202,7 @@ python scripts\collect_chats.py --show-failures
 Windowsでは、リポジトリ直下の `create_desktop_shortcut.bat` を1回だけダブルクリックすると、
 現在のユーザーのデスクトップに「ミミィチャット検索 更新」ショートカットを作成します。
 
-ショートカットのリンク先は同じフォルダの `update_chat.bat` です。
+ショートカットのリンク先は同じフォルダの `launch_update_chat_gui.bat` です。
 リポジトリの保存場所を移動した場合は、`create_desktop_shortcut.bat` をもう一度実行してください。
 
 ## データ健康診断
@@ -220,3 +238,4 @@ durationを大きく超えるチャット時刻など、即破損とは断定で
 
 このActionはYouTubeやyt-dlpへアクセスしません。
 リポジトリ内のデータ整合性とPython構文だけを確認します。
+`update_chat_gui.py` の構文もチェック対象です。
