@@ -69,7 +69,7 @@
         showStatus('インデックスを読み込み中...');
 
         try {
-            const res = await fetch(`${DATA_BASE}/index.json?v=13`);
+            const res = await fetch(`${DATA_BASE}/index.json`, { cache: 'no-store' });
             state.index = await res.json();
         } catch (e) {
             showStatus('データが見つかりません。collect_chats.py でデータを収集してください。');
@@ -247,7 +247,7 @@
                     return;
                 }
                 try {
-                    const res = await fetch(`${DATA_BASE}/chunks/${video.id}.json?v=13`);
+                    const res = await fetch(`${DATA_BASE}/chunks/${video.id}.json`, { cache: 'no-cache' });
                     const messages = await res.json();
                     state.loadedChunks[video.id] = messages;
 
