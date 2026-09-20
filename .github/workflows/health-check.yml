@@ -1,0 +1,30 @@
+name: Repository health check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-data:
+    name: Validate chat data
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate index and chunks
+        run: python scripts/health_check.py
+
+      - name: Check Python syntax
+        run: python -m compileall -q scripts
