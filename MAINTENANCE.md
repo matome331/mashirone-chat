@@ -86,7 +86,7 @@ GitHub-hosted runner上では、YouTube側のbot判定・共有データセン�
 3. 特定動画の再取得モード — 完了
 4. 失敗動画・失敗理由を記録する台帳 — 完了
 5. Windowsでワンクリック実行できる更新バッチ — 完了
-6. 取得後のデータ健康診断
+6. 取得後のデータ健康診断 — 完了
 
 ## 取得済み判定
 
@@ -186,3 +186,37 @@ Windowsでは、リポジトリ直下の `create_desktop_shortcut.bat` を1回�
 
 ショートカットのリンク先は同じフォルダの `update_chat.bat` です。
 リポジトリの保存場所を移動した場合は、`create_desktop_shortcut.bat` をもう一度実行してください。
+
+## データ健康診断
+
+ローカルで手動実行:
+
+```bat
+python scripts\health_check.py
+```
+
+`update_chat.bat` では、通常更新・全件棚卸し・1配信だけ再取得が成功した直後に
+自動で健康診断を実行します。メニューの「データ健康診断」から単独実行もできます。
+
+主なチェック項目:
+
+- `data/index.json` が正しいJSON配列か
+- 動画IDの形式と重複
+- title / duration / count / date / timestamp / rank の基本形式
+- indexにある動画のchunkが存在するか
+- indexにない孤立chunkがないか
+- chunkが正しいJSON配列か
+- indexの `count` とchunkの実メッセージ数が一致するか
+- 各メッセージの `a` / `m` / `t` 形式
+- 0件chunkがないか
+- `scripts/collection_failures.json` の形式
+
+エラーが1件でもあれば終了コード1、問題なければ0です。
+durationを大きく超えるチャット時刻など、即破損とは断定できないものはwarning扱いにします。
+
+## GitHub Actionsでの健康診断
+
+`.github/workflows/health-check.yml` はPR、mainへのpush、手動実行で動きます。
+
+このActionはYouTubeやyt-dlpへアクセスしません。
+リポジトリ内のデータ整合性とPython構文だけを確認します。
