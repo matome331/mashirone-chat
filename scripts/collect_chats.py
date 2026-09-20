@@ -4,7 +4,8 @@
 ミミィチャット検索 - データ収集パイプライン
 yt-dlp を使って YouTube ライブチャットを収集・パースし、検索用JSONを生成する
 
-GitHub Actions / ローカル両対応
+ローカル実行専用。
+GitHub-hosted Actions では YouTube / yt-dlp の取得が安定しないため、収集はPC上で実行する。
 """
 
 import json
