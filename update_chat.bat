@@ -27,18 +27,21 @@ echo     YouTube URL または動画IDを指定して取り直す
 echo.
 echo  4. 失敗動画台帳を見る
 echo.
-echo  5. 終了
+echo  5. データ健康診断
 echo.
-set /p "choice=選択 (1-5): "
+echo  6. 終了
+echo.
+set /p "choice=選択 (1-6): "
 
 if "%choice%"=="1" goto :normal_update
 if "%choice%"=="2" goto :full_scan
 if "%choice%"=="3" goto :single_video
 if "%choice%"=="4" goto :show_failures
-if "%choice%"=="5" goto :eof
+if "%choice%"=="5" goto :health_check
+if "%choice%"=="6" goto :eof
 
 echo.
-echo [!] 1～5を入力してください。
+echo [!] 1～6を入力してください。
 pause
 goto :menu
 
@@ -50,6 +53,10 @@ echo ======================================================
 echo.
 call %PYTHON_CMD% scripts\collect_chats.py --limit 10 --sleep 5
 set "RUN_RESULT=%ERRORLEVEL%"
+if "%RUN_RESULT%"=="0" (
+    call :run_health_check
+    set "RUN_RESULT=%ERRORLEVEL%"
+)
 call :show_result %RUN_RESULT%
 goto :menu
 
@@ -67,6 +74,10 @@ if /I not "%confirm%"=="y" goto :menu
 
 call %PYTHON_CMD% scripts\collect_chats.py --full-scan --limit 0 --sleep 5
 set "RUN_RESULT=%ERRORLEVEL%"
+if "%RUN_RESULT%"=="0" (
+    call :run_health_check
+    set "RUN_RESULT=%ERRORLEVEL%"
+)
 call :show_result %RUN_RESULT%
 goto :menu
 
@@ -88,6 +99,10 @@ if "%video_ref%"=="" (
 
 call %PYTHON_CMD% scripts\collect_chats.py --video "%video_ref%"
 set "RUN_RESULT=%ERRORLEVEL%"
+if "%RUN_RESULT%"=="0" (
+    call :run_health_check
+    set "RUN_RESULT=%ERRORLEVEL%"
+)
 call :show_result %RUN_RESULT%
 goto :menu
 
@@ -97,6 +112,22 @@ call %PYTHON_CMD% scripts\collect_chats.py --show-failures
 echo.
 pause
 goto :menu
+
+:health_check
+cls
+call :run_health_check
+set "RUN_RESULT=%ERRORLEVEL%"
+call :show_result %RUN_RESULT%
+goto :menu
+
+:run_health_check
+echo.
+echo ======================================================
+echo  データ健康診断
+echo ======================================================
+echo.
+call %PYTHON_CMD% scripts\health_check.py
+exit /b %ERRORLEVEL%
 
 :check_environment
 where python > nul 2>&1
