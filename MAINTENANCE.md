@@ -4,8 +4,25 @@
 
 YouTubeコメント/ライブチャットの取得は、GitHub ActionsではなくローカルPCで実行します。
 
+通常更新:
+
 ```bat
 python scripts\collect_chats.py --limit 10 --sleep 5
+```
+
+通常更新では `/streams` と `/videos` の各タブ最新100件だけ確認し、
+`data/index.json` にまだ存在しない動画IDだけを収集対象にします。
+
+古い取りこぼしを含めて全件確認したい場合:
+
+```bat
+python scripts\collect_chats.py --full-scan --limit 0 --sleep 5
+```
+
+一覧確認件数を変えたい場合:
+
+```bat
+python scripts\collect_chats.py --scan-limit 200
 ```
 
 GitHub Pagesの公開処理はそのまま利用します。
@@ -39,14 +56,25 @@ GitHub-hosted runner上では、YouTube側のbot判定・共有データセン�
 
 今後は順番に以下を整備します。
 
-1. 取得済み判定を明文化・安定化
-2. 新規配信だけを差分収集する更新モード
+1. 取得済み判定を明文化・安定化 — 完了
+2. 新規配信だけを差分収集する更新モード — 完了
 3. 特定動画の再取得モード
 4. 失敗動画・失敗理由を記録する台帳
 5. Windowsでワンクリック実行できる更新バッチ
 6. 取得後のデータ健康診断
 
-## 注意
+## 取得済み判定
 
-`scripts/progress.json` は現在の `collect_chats.py` では実質的な処理台帳として使われていません。
-収集済み判定は `data/index.json` が中心です。
+収集済み判定の正本は `data/index.json` です。
+
+- indexに動画IDがある → 取得済み
+- indexに動画IDがない → 新規候補
+- `data/chunks/<video_id>.json` は実際の検索用チャットデータ
+
+通常更新ではこの判定だけで差分収集します。
+古い未取得動画を探すときだけ `--full-scan` を使います。
+
+## エラー時の扱い
+
+チャンネル一覧のyt-dlp取得自体に失敗した場合は、更新処理をエラー終了します。
+「一覧取得失敗」を「新しい動画なし」と誤判定しません。
