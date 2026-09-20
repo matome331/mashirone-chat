@@ -21,6 +21,7 @@ REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 COLLECT_SCRIPT = os.path.join(REPO_ROOT, "scripts", "collect_chats.py")
 HEALTH_SCRIPT = os.path.join(REPO_ROOT, "scripts", "health_check.py")
 PUBLISH_SCRIPT = os.path.join(REPO_ROOT, "scripts", "publish_data.py")
+ARCHIVE_CHECK_SCRIPT = os.path.join(REPO_ROOT, "scripts", "check_archives.py")
 
 
 class ChatUpdateApp:
@@ -33,6 +34,7 @@ class ChatUpdateApp:
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.current_process: subprocess.Popen[str] | None = None
         self.running = False
+        self.stop_requested = False
         self.action_buttons: list[ttk.Button] = []
 
         self.status_var = tk.StringVar(value="起動準備中…")
@@ -111,12 +113,19 @@ class ChatUpdateApp:
         )
         health_btn.grid(row=1, column=1, sticky="ew", padx=8, pady=4)
 
+        archive_btn = ttk.Button(
+            button_frame,
+            text="全件公開状態チェック",
+            command=self._archive_availability_check,
+        )
+        archive_btn.grid(row=1, column=2, sticky="ew", padx=(8, 0), pady=4)
+
         self.clear_btn = ttk.Button(
             button_frame,
             text="ログを消す",
             command=self._clear_log,
         )
-        self.clear_btn.grid(row=1, column=2, sticky="ew", padx=(8, 0), pady=4)
+        self.clear_btn.grid(row=2, column=0, sticky="ew", padx=(0, 8), pady=(8, 4))
 
         self.stop_btn = ttk.Button(
             button_frame,
@@ -126,9 +135,10 @@ class ChatUpdateApp:
         )
         self.stop_btn.grid(
             row=2,
-            column=0,
-            columnspan=3,
+            column=1,
+            columnspan=2,
             sticky="ew",
+            padx=(8, 0),
             pady=(8, 4),
         )
 
@@ -136,7 +146,14 @@ class ChatUpdateApp:
             button_frame.columnconfigure(col, weight=1)
 
         self.action_buttons.extend(
-            [normal_btn, full_btn, publish_btn, health_btn, failures_btn]
+            [
+                normal_btn,
+                full_btn,
+                publish_btn,
+                health_btn,
+                failures_btn,
+                archive_btn,
+            ]
         )
 
         single_frame = ttk.LabelFrame(
@@ -188,7 +205,12 @@ class ChatUpdateApp:
 
     def _check_environment(self) -> None:
         missing = []
-        for path in (COLLECT_SCRIPT, HEALTH_SCRIPT, PUBLISH_SCRIPT):
+        for path in (
+            COLLECT_SCRIPT,
+            HEALTH_SCRIPT,
+            PUBLISH_SCRIPT,
+            ARCHIVE_CHECK_SCRIPT,
+        ):
             if not os.path.exists(path):
                 missing.append(os.path.relpath(path, REPO_ROOT))
 
@@ -296,6 +318,23 @@ class ChatUpdateApp:
             run_health=False,
         )
 
+    def _archive_availability_check(self) -> None:
+        if not messagebox.askyesno(
+            "全件公開状態チェック",
+            "登録済みの全配信をYouTubeへ順番に確認します。\n"
+            "数十分かかる場合があります。\n\n"
+            "非公開候補を見つけても自動削除はしません。\n"
+            "途中で停止しても、次回は続きから再開できます。\n\n"
+            "実行しますか？",
+        ):
+            return
+
+        self._run_sequence(
+            "全件公開状態チェック",
+            [[sys.executable, ARCHIVE_CHECK_SCRIPT, "--sleep", "2"]],
+            run_health=False,
+        )
+
     def _show_failures(self) -> None:
         self._run_sequence(
             "失敗動画台帳",
@@ -323,6 +362,7 @@ class ChatUpdateApp:
             return
 
         self.running = True
+        self.stop_requested = False
         self._set_actions_enabled(False)
         self.stop_btn.configure(state="normal")
         self.progress.start(12)
@@ -414,6 +454,7 @@ class ChatUpdateApp:
         ):
             return
 
+        self.stop_requested = True
         self._append_log("\n[停止要求] 実行中の処理を終了します…\n")
         try:
             self._terminate_process_tree(process)
@@ -439,8 +480,10 @@ class ChatUpdateApp:
         label = str(data.get("label", "処理"))
         return_code = int(data.get("return_code", 1))
         environment_setup = bool(data.get("environment_setup"))
+        stop_requested = self.stop_requested
 
         self.running = False
+        self.stop_requested = False
         self.current_process = None
         self.progress.stop()
         self.stop_btn.configure(state="disabled")
@@ -450,7 +493,20 @@ class ChatUpdateApp:
         else:
             self._set_actions_enabled(True)
 
-        if return_code == 0:
+        if stop_requested:
+            self.status_var.set(f"{label} 中断")
+            self._append_log(
+                f"\n⏸ {label}: 中断しました。\n"
+                "途中結果がある処理は、次回同じボタンから再開できます。\n"
+            )
+        elif label == "全件公開状態チェック" and return_code == 2:
+            self.status_var.set("公開状態チェック 一時停止")
+            self._append_log(
+                "\n⚠ 公開状態チェック: 一時停止\n"
+                "確認不能が続いたため安全のため停止しました。\n"
+                "時間を空けて同じボタンを押すと続きから再開します。\n"
+            )
+        elif return_code == 0:
             if label in {"通常更新", "全件棚卸し", "1配信だけ再取得"}:
                 self.status_var.set(f"{label} 完了（未公開）")
                 self._append_log(
