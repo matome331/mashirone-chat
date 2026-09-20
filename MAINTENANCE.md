@@ -178,3 +178,11 @@ python scripts\collect_chats.py --show-failures
 
 通常更新は最大10本を収集します。
 全件棚卸しは時間がかかるため、バッチ内で実行確認を挟みます。
+
+## デスクトップショートカット
+
+Windowsでは、リポジトリ直下の `create_desktop_shortcut.bat` を1回だけダブルクリックすると、
+現在のユーザーのデスクトップに「ミミィチャット検索 更新」ショートカットを作成します。
+
+ショートカットのリンク先は同じフォルダの `update_chat.bat` です。
+リポジトリの保存場所を移動した場合は、`create_desktop_shortcut.bat` をもう一度実行してください。
