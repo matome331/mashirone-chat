@@ -308,7 +308,7 @@ def promote_raw_chat(video_id, refreshed_path):
             continue
         try:
             os.remove(old_path)
-        except FileNotFoundError:
+        except OSError:
             pass
 
     return canonical_path
@@ -483,11 +483,17 @@ def recollect_single_video(video_ref):
                 os.remove(backup)
 
         had_chunk = os.path.exists(chunk_file)
-        if had_chunk:
-            os.replace(chunk_file, chunk_backup)
-        os.replace(INDEX_FILE, index_backup)
+        chunk_backed_up = False
+        index_backed_up = False
 
         try:
+            if had_chunk:
+                os.replace(chunk_file, chunk_backup)
+                chunk_backed_up = True
+
+            os.replace(INDEX_FILE, index_backup)
+            index_backed_up = True
+
             os.replace(chunk_tmp, chunk_file)
             os.replace(index_tmp, INDEX_FILE)
             promote_raw_chat(video_id, refreshed_path)
@@ -495,18 +501,29 @@ def recollect_single_video(video_ref):
         except Exception:
             if os.path.exists(chunk_file):
                 os.remove(chunk_file)
-            if had_chunk and os.path.exists(chunk_backup):
+            if chunk_backed_up and os.path.exists(chunk_backup):
                 os.replace(chunk_backup, chunk_file)
 
-            if os.path.exists(INDEX_FILE):
-                os.remove(INDEX_FILE)
-            if os.path.exists(index_backup):
-                os.replace(index_backup, INDEX_FILE)
+            if index_backed_up:
+                if os.path.exists(INDEX_FILE):
+                    os.remove(INDEX_FILE)
+                if os.path.exists(index_backup):
+                    os.replace(index_backup, INDEX_FILE)
+
+            for temp_path in (chunk_tmp, index_tmp):
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
             raise
         else:
             for backup in (chunk_backup, index_backup):
                 if os.path.exists(backup):
-                    os.remove(backup)
+                    try:
+                        os.remove(backup)
+                    except OSError:
+                        pass
 
         print("  ✅ 再取得完了")
         print(f"  chunk: data/chunks/{video_id}.json")
