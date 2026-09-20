@@ -20,6 +20,7 @@ from tkinter import messagebox, scrolledtext, ttk
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 COLLECT_SCRIPT = os.path.join(REPO_ROOT, "scripts", "collect_chats.py")
 HEALTH_SCRIPT = os.path.join(REPO_ROOT, "scripts", "health_check.py")
+PUBLISH_SCRIPT = os.path.join(REPO_ROOT, "scripts", "publish_data.py")
 
 
 class ChatUpdateApp:
@@ -89,12 +90,12 @@ class ChatUpdateApp:
         )
         full_btn.grid(row=0, column=1, sticky="ew", padx=8, pady=4)
 
-        health_btn = ttk.Button(
+        publish_btn = ttk.Button(
             button_frame,
-            text="データ健康診断",
-            command=self._health_check,
+            text="GitHubへ公開",
+            command=self._publish_data,
         )
-        health_btn.grid(row=0, column=2, sticky="ew", padx=(8, 0), pady=4)
+        publish_btn.grid(row=0, column=2, sticky="ew", padx=(8, 0), pady=4)
 
         failures_btn = ttk.Button(
             button_frame,
@@ -103,12 +104,19 @@ class ChatUpdateApp:
         )
         failures_btn.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=4)
 
+        health_btn = ttk.Button(
+            button_frame,
+            text="データ健康診断",
+            command=self._health_check,
+        )
+        health_btn.grid(row=1, column=1, sticky="ew", padx=8, pady=4)
+
         self.clear_btn = ttk.Button(
             button_frame,
             text="ログを消す",
             command=self._clear_log,
         )
-        self.clear_btn.grid(row=1, column=1, sticky="ew", padx=8, pady=4)
+        self.clear_btn.grid(row=1, column=2, sticky="ew", padx=(8, 0), pady=4)
 
         self.stop_btn = ttk.Button(
             button_frame,
@@ -116,13 +124,19 @@ class ChatUpdateApp:
             command=self._stop_current,
             state="disabled",
         )
-        self.stop_btn.grid(row=1, column=2, sticky="ew", padx=(8, 0), pady=4)
+        self.stop_btn.grid(
+            row=2,
+            column=0,
+            columnspan=3,
+            sticky="ew",
+            pady=(8, 4),
+        )
 
         for col in range(3):
             button_frame.columnconfigure(col, weight=1)
 
         self.action_buttons.extend(
-            [normal_btn, full_btn, health_btn, failures_btn]
+            [normal_btn, full_btn, publish_btn, health_btn, failures_btn]
         )
 
         single_frame = ttk.LabelFrame(
@@ -174,7 +188,7 @@ class ChatUpdateApp:
 
     def _check_environment(self) -> None:
         missing = []
-        for path in (COLLECT_SCRIPT, HEALTH_SCRIPT):
+        for path in (COLLECT_SCRIPT, HEALTH_SCRIPT, PUBLISH_SCRIPT):
             if not os.path.exists(path):
                 missing.append(os.path.relpath(path, REPO_ROOT))
 
@@ -265,6 +279,21 @@ class ChatUpdateApp:
             "1配信だけ再取得",
             [[sys.executable, COLLECT_SCRIPT, "--video", video_ref]],
             run_health=True,
+        )
+
+    def _publish_data(self) -> None:
+        if not messagebox.askyesno(
+            "GitHubへ公開",
+            "健康診断済みのチャットデータだけをcommitして、\n"
+            "GitHubのmainへpushします。\n\n"
+            "公開するとGitHub Pagesにも反映されます。実行しますか？",
+        ):
+            return
+
+        self._run_sequence(
+            "GitHubへ公開",
+            [[sys.executable, PUBLISH_SCRIPT]],
+            run_health=False,
         )
 
     def _show_failures(self) -> None:
@@ -422,8 +451,22 @@ class ChatUpdateApp:
             self._set_actions_enabled(True)
 
         if return_code == 0:
-            self.status_var.set(f"{label} 完了")
-            self._append_log(f"\n✅ {label}: 完了\n")
+            if label in {"通常更新", "全件棚卸し", "1配信だけ再取得"}:
+                self.status_var.set(f"{label} 完了（未公開）")
+                self._append_log(
+                    f"\n✅ {label}: 完了\n"
+                    "サイトへ反映する場合は「GitHubへ公開」を押してください。\n"
+                )
+            elif label == "GitHubへ公開":
+                self.status_var.set("GitHubへ公開 完了")
+                self._append_log(
+                    "\n✅ GitHubへ公開: 完了\n"
+                    "GitHub Pagesの反映には少し時間がかかる場合があります。\n"
+                )
+            else:
+                self.status_var.set(f"{label} 完了")
+                self._append_log(f"\n✅ {label}: 完了\n")
+
             if environment_setup:
                 self._append_log("yt-dlp の準備ができました。\n")
             elif label == "1配信だけ再取得":

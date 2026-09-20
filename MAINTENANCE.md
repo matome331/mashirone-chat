@@ -13,6 +13,7 @@ GUI機能:
 - 1配信だけ再取得（URL / 動画ID入力）
 - 失敗動画台帳の表示
 - データ健康診断
+- GitHubへ公開（公開データだけcommit/push）
 - 実行ログの画面内表示
 - 実行中の停止
 
@@ -177,6 +178,7 @@ GUI本体は `update_chat_gui.py` です。
 収集ロジックをGUI側へ重複実装していません。
 
 通常更新・全件棚卸し・1配信だけ再取得が成功した場合は、自動で健康診断まで実行します。
+取得成功後は「完了（未公開）」と表示されます。サイトへ反映するには「GitHubへ公開」を実行します。
 処理中の標準出力・エラー出力はGUI内のログ欄へ表示します。
 
 Tkinterが利用できない環境やGUI側のトラブル時は、従来の `update_chat.bat` を利用できます。
@@ -239,3 +241,41 @@ durationを大きく超えるチャット時刻など、即破損とは断定で
 このActionはYouTubeやyt-dlpへアクセスしません。
 リポジトリ内のデータ整合性とPython構文だけを確認します。
 `update_chat_gui.py` の構文もチェック対象です。
+
+## GitHub Pagesへの公開
+
+ローカル収集したデータは、取得しただけではGitHub Pagesへ反映されません。
+
+GUIの「GitHubへ公開」は `scripts/publish_data.py` を実行し、次の公開データだけを
+commit / pushします。
+
+- `data/index.json`
+- `data/chunks/`
+
+`scripts/collection_failures.json` や、その他のコード・設定ファイルは自動公開しません。
+
+公開前には次を確認します。
+
+- データ健康診断がOK
+- 現在のブランチが `main`
+- `origin/main` よりローカルが古くない
+- 公開対象外のファイルがstageされていない
+- 未pushのcommitがある場合、その変更が公開データだけである
+
+安全確認に失敗した場合はcommit / pushせず中止します。
+
+コマンド単体でも実行できます。
+
+```bat
+python scripts\publish_data.py
+```
+
+## 公開サイトのデータキャッシュ
+
+固定の `?v=13` は廃止しました。
+
+- `data/index.json` は `cache: no-store` で毎回最新版を取得
+- chunkは `cache: no-cache` でブラウザキャッシュを再検証
+
+これにより、公開後に古いindex/chunkを掴み続ける問題を避けつつ、
+全chunkを無条件に毎回再ダウンロードする方式にはしていません。
