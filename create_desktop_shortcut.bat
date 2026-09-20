@@ -3,10 +3,10 @@ setlocal
 chcp 65001 > nul
 
 set "BASE_DIR=%~dp0"
-set "TARGET=%BASE_DIR%update_chat.bat"
+set "TARGET=%BASE_DIR%launch_update_chat_gui.bat"
 
 if not exist "%TARGET%" (
-    echo [ERROR] update_chat.bat が見つかりません。
+    echo [ERROR] launch_update_chat_gui.bat が見つかりません。
     echo このファイルをリポジトリ直下で実行してください。
     echo.
     pause
@@ -23,7 +23,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$shortcut=$shell.CreateShortcut($path);" ^
   "$shortcut.TargetPath=$env:SHORTCUT_TARGET;" ^
   "$shortcut.WorkingDirectory=$env:SHORTCUT_WORKDIR;" ^
-  "$shortcut.Description='ミミィチャット検索 コメントログ更新';" ^
+  "$shortcut.Description='ミミィチャット検索 GUI コメントログ更新';" ^
   "$shortcut.Save();" ^
   "Write-Host ('作成しました: ' + $path)"
 
