@@ -297,17 +297,20 @@ def download_live_chat(video_id, force=False):
 def promote_raw_chat(video_id, refreshed_path):
     """検証済みの再取得rawを正式なrawファイルへ差し替える。"""
     canonical_path = os.path.join(RAW_DIR, f"chat_{video_id}.live_chat.json")
-    old_files = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
 
+    # 先に新しいrawをatomic replaceし、成功後に古い別名rawを掃除する。
+    # replaceに失敗した場合は既存rawを消さない。
+    os.replace(refreshed_path, canonical_path)
+
+    old_files = glob.glob(os.path.join(RAW_DIR, f"chat_{video_id}*live_chat*"))
     for old_path in old_files:
-        if os.path.abspath(old_path) == os.path.abspath(refreshed_path):
+        if os.path.abspath(old_path) == os.path.abspath(canonical_path):
             continue
         try:
             os.remove(old_path)
         except FileNotFoundError:
             pass
 
-    os.replace(refreshed_path, canonical_path)
     return canonical_path
 
 
@@ -460,22 +463,50 @@ def recollect_single_video(video_ref):
             'timestamp': timestamp,
         }
 
-        # chunk は一時ファイルに書いてから置換する。
+        # chunk / index は両方を一時ファイルへ書いた後、バックアップを
+        # 作って差し替える。途中失敗時は元ファイルへロールバックする。
         chunk_file = os.path.join(CHUNKS_DIR, f"{video_id}.json")
         chunk_tmp = chunk_file + ".tmp"
+        index_tmp = INDEX_FILE + ".tmp"
+        chunk_backup = chunk_file + ".recollect.bak"
+        index_backup = INDEX_FILE + ".recollect.bak"
+
         with open(chunk_tmp, 'w', encoding='utf-8') as f:
             json.dump(messages, f, ensure_ascii=False, separators=(',', ':'))
-        os.replace(chunk_tmp, chunk_file)
 
-        # index も一時ファイル経由で置換する。
         combined_index = update_index(existing_index, [new_entry])
-        index_tmp = INDEX_FILE + ".tmp"
         with open(index_tmp, 'w', encoding='utf-8') as f:
             json.dump(combined_index, f, ensure_ascii=False, indent=2)
-        os.replace(index_tmp, INDEX_FILE)
 
-        promote_raw_chat(video_id, refreshed_path)
-        refreshed_path = None
+        for backup in (chunk_backup, index_backup):
+            if os.path.exists(backup):
+                os.remove(backup)
+
+        had_chunk = os.path.exists(chunk_file)
+        if had_chunk:
+            os.replace(chunk_file, chunk_backup)
+        os.replace(INDEX_FILE, index_backup)
+
+        try:
+            os.replace(chunk_tmp, chunk_file)
+            os.replace(index_tmp, INDEX_FILE)
+            promote_raw_chat(video_id, refreshed_path)
+            refreshed_path = None
+        except Exception:
+            if os.path.exists(chunk_file):
+                os.remove(chunk_file)
+            if had_chunk and os.path.exists(chunk_backup):
+                os.replace(chunk_backup, chunk_file)
+
+            if os.path.exists(INDEX_FILE):
+                os.remove(INDEX_FILE)
+            if os.path.exists(index_backup):
+                os.replace(index_backup, INDEX_FILE)
+            raise
+        else:
+            for backup in (chunk_backup, index_backup):
+                if os.path.exists(backup):
+                    os.remove(backup)
 
         print("  ✅ 再取得完了")
         print(f"  chunk: data/chunks/{video_id}.json")
