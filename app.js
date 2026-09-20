@@ -28,6 +28,7 @@
         readingFilter: false,   // 読み仮名パターンフィルタ
         uncheckedFilter: false, // 未チェック配信フィルタ
         godokuDates: new Set(), // 誤読まとめ登録済み日付
+        excludedVideoIds: new Set(), // 公開検索から除外する動画ID
         videoDateMap: {},    // vid_id -> date string
     };
 
@@ -69,8 +70,24 @@
         showStatus('インデックスを読み込み中...');
 
         try {
-            const res = await fetch(`${DATA_BASE}/index.json`, { cache: 'no-store' });
-            state.index = await res.json();
+            const [indexRes, excludedIds] = await Promise.all([
+                fetch(`${DATA_BASE}/index.json`, { cache: 'no-store' }),
+                loadExcludedVideoIds(),
+            ]);
+
+            if (!indexRes.ok) {
+                throw new Error(`index.json HTTP ${indexRes.status}`);
+            }
+
+            const rawIndex = await indexRes.json();
+            state.excludedVideoIds = excludedIds;
+            state.index = rawIndex.filter(video => !excludedIds.has(video.id));
+
+            if (excludedIds.size > 0) {
+                console.log(
+                    `公開除外: ${excludedIds.size}動画 / 検索対象: ${state.index.length}動画`
+                );
+            }
         } catch (e) {
             showStatus('データが見つかりません。collect_chats.py でデータを収集してください。');
             return;
@@ -189,6 +206,34 @@
 
         hideStatus();
         dom.searchInput.focus();
+    }
+
+    async function loadExcludedVideoIds() {
+        const excluded = new Set();
+
+        try {
+            const res = await fetch('./excluded_videos.txt', { cache: 'no-store' });
+            if (!res.ok) {
+                console.warn('excluded_videos.txt を取得できません:', res.status);
+                return excluded;
+            }
+
+            const text = await res.text();
+            for (const rawLine of text.split(/\r?\n/)) {
+                const videoId = rawLine.split('#', 1)[0].trim();
+                if (!videoId) continue;
+
+                if (/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+                    excluded.add(videoId);
+                } else {
+                    console.warn('不正な除外動画IDを無視:', videoId);
+                }
+            }
+        } catch (e) {
+            console.warn('公開除外リストの取得に失敗:', e);
+        }
+
+        return excluded;
     }
 
     // ===== フィルターヘルパー =====

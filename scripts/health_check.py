@@ -19,6 +19,7 @@ INDEX_FILE = os.path.join(DATA_DIR, "index.json")
 FAILURE_LEDGER_FILE = os.path.join(
     REPO_ROOT, "scripts", "collection_failures.json"
 )
+EXCLUDED_VIDEOS_FILE = os.path.join(REPO_ROOT, "excluded_videos.txt")
 
 VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 DATE_RE = re.compile(r"^\d{4}/\d{2}/\d{2}$")
@@ -205,6 +206,36 @@ def validate_chunks(index_by_id, report):
                     )
 
 
+def validate_excluded_videos(report):
+    if not os.path.exists(EXCLUDED_VIDEOS_FILE):
+        report.error("excluded_videos.txt が見つかりません")
+        return set()
+
+    excluded = set()
+    with open(EXCLUDED_VIDEOS_FILE, "r", encoding="utf-8") as f:
+        for line_no, raw_line in enumerate(f, start=1):
+            video_id = raw_line.split("#", 1)[0].strip()
+            if not video_id:
+                continue
+
+            if not VIDEO_ID_RE.fullmatch(video_id):
+                report.error(
+                    f"excluded_videos.txt line {line_no}: "
+                    f"動画ID形式が不正です: {video_id!r}"
+                )
+                continue
+
+            if video_id in excluded:
+                report.error(
+                    f"excluded_videos.txt line {line_no}: 重複ID {video_id}"
+                )
+                continue
+
+            excluded.add(video_id)
+
+    return excluded
+
+
 def validate_failure_ledger(report):
     ledger = load_json(
         FAILURE_LEDGER_FILE,
@@ -271,9 +302,11 @@ def main():
 
     index, index_by_id = validate_index(report)
     validate_chunks(index_by_id, report)
+    excluded_ids = validate_excluded_videos(report)
     validate_failure_ledger(report)
 
     print(f"  index動画数: {len(index_by_id)}")
+    print(f"  公開除外動画数: {len(excluded_ids)}")
     print(f"  検証メッセージ数: {report.checked_messages:,}")
     print(f"  warning: {len(report.warnings)}")
     print(f"  error: {len(report.errors)}")

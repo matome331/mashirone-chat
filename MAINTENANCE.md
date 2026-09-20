@@ -319,3 +319,34 @@ python scripts\check_archives.py --sleep 2
 ```bat
 python scripts\check_archives.py --restart --sleep 2
 ```
+
+## 承認済み非公開動画の共通除外
+
+公開検索から外す動画IDの正本は、リポジトリ直下の `excluded_videos.txt` です。
+
+方針:
+
+- 元の `data/index.json` / `data/chunks/` は削除しない
+- サイト起動時に `excluded_videos.txt` を読み、該当動画を検索対象から外す
+- 除外解除はリストから動画IDを外すだけで復帰可能
+- `excluded_videos.txt` は「GitHubへ公開」の対象に含める
+- 誤読まとめ側も同じ動画IDリストを参照する
+
+標準運用:
+
+1. GUIで「全件公開状態チェック」
+2. 非公開候補をこのChatで確認
+3. 明確に非公開・削除・検索除外対象と確認できたIDだけ承認
+4. 承認済みIDを `excluded_videos.txt` へ追加
+5. 「GitHubへ公開」
+6. チャット検索と誤読まとめの両方から検索対象外になることを確認
+
+ローカルで承認済みIDを追加する場合:
+
+```bat
+python scripts\exclude_video.py VIDEO_ID --reason "非公開化をChatで確認"
+```
+
+YouTube URLも指定できます。
+
+この操作はindex/chunkを削除しません。
