@@ -224,7 +224,7 @@ def get_video_list_from_channel(scan_limit=DEFAULT_SCAN_LIMIT):
     for tab in ["/streams", "/videos"]:
         print(f"    {tab} タブ取得中...")
         cmd = [
-            "yt-dlp",
+            sys.executable, "-m", "yt_dlp",
             "--flat-playlist",
             "--encoding", "utf-8",
             "--print", "%(id)s\t%(title)s\t%(duration)s",
@@ -303,7 +303,7 @@ def get_video_metadata(video_id):
     """単一動画のタイトル・長さ・配信日をyt-dlpから取得する。"""
     url = f"https://www.youtube.com/watch?v={video_id}"
     cmd = [
-        "yt-dlp",
+        sys.executable, "-m", "yt_dlp",
         "--skip-download",
         "--encoding", "utf-8",
         "--print", "%(id)s",
@@ -363,7 +363,7 @@ def get_video_metadata(video_id):
 def get_video_upload_date(video_id):
     """yt-dlp で動画の配信日を取得"""
     cmd = [
-        "yt-dlp",
+        sys.executable, "-m", "yt_dlp",
         "--skip-download",
         "--print", "%(upload_date)s",
         f"https://www.youtube.com/watch?v={video_id}",
@@ -402,7 +402,7 @@ def download_live_chat(video_id, force=False):
         output_path = os.path.join(RAW_DIR, f"chat_{video_id}")
 
     cmd = [
-        "yt-dlp",
+        sys.executable, "-m", "yt_dlp",
         "--skip-download",
         "--write-subs",
         "--sub-langs", "live_chat",
