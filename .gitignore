@@ -29,3 +29,7 @@ desktop.ini
 .env.*
 *.pem
 *.key
+
+# Local archive availability check state/report
+scripts/archive_check_state.json
+scripts/archive_check_report.json
