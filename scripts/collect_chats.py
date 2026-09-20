@@ -556,10 +556,19 @@ def recollect_single_video(video_ref):
         None,
     )
 
-    metadata = get_video_metadata(video_id)
-    title = metadata.get('title') or (
-        existing_entry.get('title', '') if existing_entry else ''
-    )
+    existing_title = existing_entry.get('title', '') if existing_entry else ''
+    try:
+        metadata = get_video_metadata(video_id)
+    except Exception as exc:
+        record_failure(
+            video_id,
+            existing_title,
+            "metadata_error",
+            str(exc),
+        )
+        raise
+
+    title = metadata.get('title') or existing_title
     duration = metadata.get('duration') or (
         existing_entry.get('duration', 0) if existing_entry else 0
     )
