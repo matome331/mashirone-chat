@@ -36,7 +36,7 @@ CHUNKS_DIR = os.path.join(DATA_DIR, "chunks")
 INDEX_FILE = os.path.join(DATA_DIR, "index.json")
 FAILURE_LEDGER_FILE = os.path.join(SCRIPTS_DIR, "collection_failures.json")
 DEFAULT_SCAN_LIMIT = 100
-DEFAULT_SKIP_RECENT = 3
+DEFAULT_SKIP_RECENT = 0
 
 # チャンネル情報
 CHANNEL_URL = "https://www.youtube.com/@mashi_rone"
@@ -227,7 +227,7 @@ def get_video_list_from_channel(scan_limit=DEFAULT_SCAN_LIMIT):
             sys.executable, "-m", "yt_dlp",
             "--flat-playlist",
             "--encoding", "utf-8",
-            "--print", "%(id)s\t%(title)s\t%(duration)s",
+            "--print", "%(id)s\t%(title)s\t%(duration)s\t%(live_status)s",
         ]
         if scan_limit is not None:
             cmd.extend(["--playlist-end", str(scan_limit)])
@@ -252,6 +252,7 @@ def get_video_list_from_channel(scan_limit=DEFAULT_SCAN_LIMIT):
             parts = line.split('\t')
             if len(parts) >= 3:
                 vid_id, title, duration_str = parts[0], parts[1], parts[2]
+                live_status = parts[3] if len(parts) >= 4 else "NA"
 
                 if vid_id in seen_ids:
                     continue
@@ -271,6 +272,7 @@ def get_video_list_from_channel(scan_limit=DEFAULT_SCAN_LIMIT):
                     'id': vid_id,
                     'title': title,
                     'duration': duration,
+                    'live_status': live_status,
                 })
                 tab_count += 1
 
@@ -742,8 +744,35 @@ def collect_and_process(
         print("  新しい動画はありません。")
         return
 
-    # 最新の数本はチャットリプレイが未生成の可能性があるためスキップ
-    # (yt-dlp は新しい順で返すので、先頭が最新)
+    # 直近何本かを無条件に飛ばすのではなく、YouTubeのlive_statusで
+    # 配信中・配信予定だけを保留する。終了済み配信は最新でも取得対象。
+    active_statuses = {"is_live", "is_upcoming"}
+    deferred_videos = [
+        v for v in new_videos
+        if v.get('live_status') in active_statuses
+    ]
+    new_videos = [
+        v for v in new_videos
+        if v.get('live_status') not in active_statuses
+    ]
+    if deferred_videos:
+        print(
+            f"  配信中/配信予定を {len(deferred_videos)}本 保留"
+            "（終了後に自動で収集対象になります）"
+        )
+        for video in deferred_videos[:5]:
+            print(
+                f"    - {video['id']} | "
+                f"{video.get('live_status', 'unknown')} | "
+                f"{video.get('title', '')[:60]}"
+            )
+
+    if not new_videos:
+        print("  収集対象はありません（配信中/配信予定のみ）。")
+        return
+
+    # --skip-recent を明示指定した場合だけ、追加の手動保留を行う。
+    # 通常更新のデフォルトは0本。
     if skip_recent > 0 and new_videos:
         skip_count = min(skip_recent, len(new_videos))
         new_videos = new_videos[skip_count:]
@@ -876,7 +905,7 @@ if __name__ == '__main__':
     parser.add_argument('--full-scan', action='store_true',
                        help='復旧・棚卸し用。チャンネル一覧を全件確認する')
     parser.add_argument('--skip-recent', type=int, default=DEFAULT_SKIP_RECENT,
-                       help=f'チャットリプレイ待ちで直近何本を保留するか (default: {DEFAULT_SKIP_RECENT})')
+                       help=f'必要な場合だけ直近何本を追加保留するか (default: {DEFAULT_SKIP_RECENT})')
     parser.add_argument('--video',
                        help='指定したYouTube URLまたは動画IDだけを再取得する')
     parser.add_argument('--show-failures', action='store_true',
