@@ -29,6 +29,15 @@ python scripts\collect_chats.py --limit 10 --sleep 5
 通常更新では `/streams` と `/videos` の各タブ最新100件だけ確認し、
 `data/index.json` にまだ存在しない動画IDだけを収集対象にします。
 
+配信状態はyt-dlpの `live_status` を見て判定します。
+
+- `is_live` — 配信中のため保留
+- `is_upcoming` — 配信予定のため保留
+- 終了済み配信 — 直近の動画でも収集対象
+
+以前の「未収集動画の先頭3本を一律スキップ」は廃止しました。
+必要な場合だけ `--skip-recent N` を手動指定できます。
+
 古い取りこぼしを含めて全件確認したい場合:
 
 ```bat
@@ -53,7 +62,7 @@ python scripts\collect_chats.py --video "https://www.youtube.com/watch?v=XXXXXXX
 python scripts\collect_chats.py --video XXXXXXXXXXX
 ```
 
-単一動画モードは通常の取得済み判定や直近スキップを無視して、その動画だけを再取得します。
+単一動画モードは通常の取得済み判定や配信状態による保留を無視して、その動画だけを再取得します。
 再取得・パースに失敗した場合は既存のchunk/indexを変更しません。
 
 GitHub Pagesの公開処理はそのまま利用します。
@@ -166,7 +175,7 @@ python scripts\collect_chats.py --show-failures
 同じ動画が再び失敗した場合は `attempts` を加算します。
 通常収集または `--video` 再取得で成功した動画は、失敗台帳から自動的に削除します。
 
-直近配信をチャットリプレイ待ちで保留しただけの場合や、
+配信中・配信予定として保留した動画や、
 `EXCLUDED_IDS` / メン限タイトル判定で意図的に除外した動画は失敗台帳へ入れません。
 
 ## Windows GUI更新ツール
